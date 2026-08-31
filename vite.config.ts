@@ -1,3 +1,5 @@
+import { cloudflare } from '@cloudflare/vite-plugin'
+import { sites } from '@openai/sites-vite-plugin'
 import { readFile } from 'node:fs/promises'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
@@ -62,5 +64,11 @@ function localAccessApi() {
 
 // https://vite.dev/config/
 export default defineConfig({
-  plugins: [localAccessApi(), react(), tailwindcss()],
+  plugins: [
+    localAccessApi(),
+    react(),
+    tailwindcss(),
+    sites(),
+    cloudflare(),
+  ],
 })
