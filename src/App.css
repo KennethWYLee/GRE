@@ -21,6 +21,7 @@
 .part-number { font-family: var(--display); font-size: 2.1rem; }
 .part-title { margin-top: auto; font-size: 1rem; font-weight: 750; }
 .part-meta { margin-top: 4px; color: var(--muted); font-size: .72rem; }
+.part-counts { margin-top: 8px; color: var(--green); font-size: .67rem; font-weight: 800; }
 .part-progress { position: absolute; right: 42px; bottom: 24px; left: 18px; height: 2px; overflow: hidden; background: var(--line); }
 .part-progress i { display: block; height: 100%; background: var(--green); transition: width 180ms ease; }
 .part-known { position: absolute; right: 18px; bottom: 17px; color: var(--muted); font-size: .62rem; font-weight: 700; }
@@ -36,6 +37,19 @@
 .icon-button { color: var(--ink); }
 .progress-track { width: 100%; height: 3px; overflow: hidden; background: var(--line); }
 .progress-track span { display: block; height: 100%; background: var(--green); transition: width 220ms ease; }
+.memory-progress { margin-top: 14px; border: 1px solid var(--line-dark); background: var(--card); }
+.memory-progress-heading { display: flex; align-items: center; justify-content: space-between; padding: 10px 13px 8px; }
+.memory-progress-heading span { color: var(--muted); font-size: .67rem; font-weight: 800; letter-spacing: .08em; }
+.memory-progress-heading strong { color: var(--green); font-family: var(--display); font-size: 1.05rem; }
+.memory-progress-track { height: 3px; overflow: hidden; background: var(--line); }
+.memory-progress-track span { display: block; height: 100%; background: var(--green); transition: width 220ms ease; }
+.memory-progress-table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+.memory-progress-table th, .memory-progress-table td { width: 33.333%; border-right: 1px solid var(--line); text-align: center; }
+.memory-progress-table th:last-child, .memory-progress-table td:last-child { border-right: 0; }
+.memory-progress-table th { padding: 8px 5px 2px; color: var(--muted); font-size: .62rem; font-weight: 700; }
+.memory-progress-table td { padding: 0 5px 9px; color: var(--ink); }
+.memory-progress-table td strong { font-family: var(--display); font-size: 1.2rem; font-weight: 650; }
+.memory-progress-table td span { color: var(--muted); font-size: .63rem; }
 .study-toolbar { padding: 14px 0 0; }
 .mode-tabs { display: grid; grid-template-columns: repeat(3, 1fr); border: 1px solid var(--line-dark); }
 .mode-tabs button { min-height: 38px; border: 0; border-right: 1px solid var(--line-dark); background: transparent; color: var(--muted); cursor: pointer; font-size: .75rem; font-weight: 700; }
@@ -115,6 +129,7 @@
   .part-number { width: 48px; font-size: 1.65rem; }
   .part-title { margin-top: 0; }
   .part-meta { margin: 0 36px 0 auto; }
+  .part-counts { position: absolute; right: 42px; bottom: 20px; margin: 0; }
   .part-progress { right: 70px; bottom: 12px; left: 78px; }
   .part-known { right: 42px; bottom: 5px; }
   .part-arrow { right: 10px; top: 50%; transform: translateY(-50%); }

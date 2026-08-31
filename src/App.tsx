@@ -420,6 +420,7 @@ function App() {
 
   if (selectedPart === null) {
     const totalKnown = Object.values(memory.recall).filter((recall) => recall === 'known').length
+    const totalRemaining = data.meta.totalWords - totalKnown
     return (
       <main className="app-shell home-shell">
         <header className="brand-bar">
@@ -427,7 +428,7 @@ function App() {
             <span className="brand-mark"><Sprout size={18} /></span>
             GRE ROOTS
           </a>
-          <span className="word-total">已記住 {totalKnown} / {data.meta.totalWords.toLocaleString()}</span>
+          <span className="word-total">已背 {totalKnown.toLocaleString()} · 剩 {totalRemaining.toLocaleString()}</span>
         </header>
 
         <section className="intro">
@@ -450,12 +451,14 @@ function App() {
           <div className="part-grid">
             {data.parts.map((part) => {
               const known = knownCountForPart(part.id)
+              const remaining = part.totalWordCount - known
               const percent = Math.round((known / part.totalWordCount) * 100)
               return (
                 <button className="part-card" key={part.id} onClick={() => openPart(part.id)} type="button">
                   <span className="part-number">0{part.id}</span>
                   <span className="part-title">第 {part.id} 份</span>
                   <span className="part-meta">{part.rootGroupCount} 字根 · {part.totalWordCount} 字</span>
+                  <span className="part-counts">已背 {known} · 剩 {remaining}</span>
                   <span className="part-progress"><i style={{ width: `${percent}%` }} /></span>
                   <span className="part-known">{percent}%</span>
                   <span className="part-arrow"><ChevronRight size={18} /></span>
@@ -469,6 +472,10 @@ function App() {
   }
 
   const partSummary = data.parts.find((part) => part.id === selectedPart)
+  const partKnown = knownCountForPart(selectedPart)
+  const partTotal = partSummary?.totalWordCount ?? 0
+  const partRemaining = partTotal - partKnown
+  const partKnownPercent = partTotal ? Math.round((partKnown / partTotal) * 100) : 0
   const currentRecall = activeWord ? memory.recall[activeWord.id] : undefined
   const pronunciationLabel =
     pronunciationStatus === 'recording' ? '美式真人發音' :
@@ -495,6 +502,28 @@ function App() {
       <div className="progress-track" aria-label="目前卡組進度">
         <span style={{ width: filteredWords.length ? `${((cardIndex + 1) / filteredWords.length) * 100}%` : '0%' }} />
       </div>
+
+      <section className="memory-progress" aria-labelledby="memory-progress-heading">
+        <div className="memory-progress-heading">
+          <span id="memory-progress-heading">本份背誦進度</span>
+          <strong>{partKnownPercent}%</strong>
+        </div>
+        <div className="memory-progress-track" aria-hidden="true">
+          <span style={{ width: `${partKnownPercent}%` }} />
+        </div>
+        <table className="memory-progress-table">
+          <thead>
+            <tr><th scope="col">已背</th><th scope="col">還剩</th><th scope="col">全部</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong>{partKnown}</strong><span> 字</span></td>
+              <td><strong>{partRemaining}</strong><span> 字</span></td>
+              <td><strong>{partTotal}</strong><span> 字</span></td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
 
       <section className="study-toolbar" aria-label="篩選字卡">
         <div className="mode-tabs">
