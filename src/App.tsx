@@ -248,7 +248,7 @@ function App() {
               <p className="section-kicker">TODAY'S DECK</p>
               <h2 id="part-heading">今天想背哪一份？</h2>
             </div>
-            <p>進度只存在這支裝置，不需登入</p>
+            <p>App 不另設帳號，進度只存在這支裝置</p>
           </div>
 
           <div className="part-grid">
