@@ -6,10 +6,13 @@ import {
   ChevronRight,
   CircleHelp,
   LoaderCircle,
+  Pause,
+  Play,
   RotateCcw,
   Search,
   Shuffle,
   Sprout,
+  Timer,
   Volume2,
   X,
 } from 'lucide-react'
@@ -63,6 +66,8 @@ type MemoryStore = {
 }
 
 const STORAGE_KEY = 'gre-roots-progress-v1'
+const AUTOPLAY_SECONDS_KEY = 'gre-roots-autoplay-seconds-v1'
+const AUTOPLAY_OPTIONS = [3, 5, 8, 10, 15, 20, 30] as const
 const SILENT_AUDIO =
   'data:audio/wav;base64,UklGRiYAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQIAAACAgA=='
 
@@ -77,6 +82,11 @@ function loadMemory(): MemoryStore {
   }
 }
 
+function loadAutoplaySeconds() {
+  const saved = Number(window.localStorage.getItem(AUTOPLAY_SECONDS_KEY))
+  return AUTOPLAY_OPTIONS.includes(saved as (typeof AUTOPLAY_OPTIONS)[number]) ? saved : 8
+}
+
 function App() {
   const [data, setData] = useState<VocabularyData | null>(null)
   const [selectedPart, setSelectedPart] = useState<number | null>(null)
@@ -89,6 +99,8 @@ function App() {
   const [memory, setMemory] = useState<MemoryStore>(loadMemory)
   const [error, setError] = useState('')
   const [pronunciationStatus, setPronunciationStatus] = useState<PronunciationStatus>('idle')
+  const [autoPlay, setAutoPlay] = useState(false)
+  const [cardDuration, setCardDuration] = useState(loadAutoplaySeconds)
   const touchStartX = useRef<number | null>(null)
   const audioRef = useRef<HTMLAudioElement | null>(null)
   const audioUnlockedRef = useRef(false)
@@ -200,6 +212,10 @@ function App() {
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify(memory))
   }, [memory])
 
+  useEffect(() => {
+    window.localStorage.setItem(AUTOPLAY_SECONDS_KEY, String(cardDuration))
+  }, [cardDuration])
+
   const partWords = useMemo(
     () => data?.words.filter((word) => word.part === selectedPart) ?? [],
     [data, selectedPart],
@@ -251,6 +267,37 @@ function App() {
 
   useEffect(() => stopPronunciation, [stopPronunciation])
 
+  useEffect(() => {
+    if (!autoPlay || !activeWord) return
+
+    const totalMilliseconds = cardDuration * 1000
+    const resetTimer = window.setTimeout(() => setFlipped(false), 0)
+    const flipTimer = window.setTimeout(() => setFlipped(true), totalMilliseconds / 2)
+    const nextTimer = window.setTimeout(() => {
+      if (cardIndex >= filteredWords.length - 1) {
+        setAutoPlay(false)
+        setFlipped(true)
+        return
+      }
+
+      const nextIndex = cardIndex + 1
+      setCardIndex(nextIndex)
+      setFlipped(false)
+      if (selectedPart !== null && studyMode === 'all' && rootFilter === 'all' && !query) {
+        setMemory((current) => ({
+          ...current,
+          positions: { ...current.positions, [String(selectedPart)]: nextIndex },
+        }))
+      }
+    }, totalMilliseconds)
+
+    return () => {
+      window.clearTimeout(resetTimer)
+      window.clearTimeout(flipTimer)
+      window.clearTimeout(nextTimer)
+    }
+  }, [activeWord, autoPlay, cardDuration, cardIndex, filteredWords.length, query, rootFilter, selectedPart, studyMode])
+
   const rootsForPart = useMemo(
     () => data?.rootGroups.filter((group) => group.part === selectedPart) ?? [],
     [data, selectedPart],
@@ -261,6 +308,7 @@ function App() {
 
   const openPart = (part: number) => {
     unlockAudio()
+    setAutoPlay(false)
     setSelectedPart(part)
     setStudyMode('all')
     setRootFilter('all')
@@ -297,6 +345,7 @@ function App() {
 
   const applyMode = (mode: StudyMode) => {
     unlockAudio()
+    setAutoPlay(false)
     setStudyMode(mode)
     setCardIndex(0)
     setFlipped(false)
@@ -304,6 +353,7 @@ function App() {
 
   const applyRoot = (root: string) => {
     unlockAudio()
+    setAutoPlay(false)
     setRootFilter(root)
     setCardIndex(0)
     setFlipped(false)
@@ -311,6 +361,7 @@ function App() {
 
   const shuffleDeck = () => {
     unlockAudio()
+    setAutoPlay(false)
     const shuffled = [...partWords.map((word) => word.id)]
     for (let index = shuffled.length - 1; index > 0; index -= 1) {
       const target = Math.floor(Math.random() * (index + 1))
@@ -323,7 +374,22 @@ function App() {
 
   const returnHome = () => {
     stopPronunciation()
+    setAutoPlay(false)
     setSelectedPart(null)
+  }
+
+  const toggleAutoPlay = () => {
+    unlockAudio()
+    if (!autoPlay && activeWord) {
+      setFlipped(false)
+      void playPronunciation(activeWord.word)
+    }
+    setAutoPlay((playing) => !playing)
+  }
+
+  const changeCardDuration = (seconds: number) => {
+    setCardDuration(seconds)
+    if (autoPlay) setFlipped(false)
   }
 
   useEffect(() => {
@@ -447,12 +513,12 @@ function App() {
             <Search size={16} aria-hidden="true" />
             <input
               aria-label="搜尋單字、字根或意思"
-              onChange={(event) => { setQuery(event.target.value); setCardIndex(0); setFlipped(false) }}
+              onChange={(event) => { setAutoPlay(false); setQuery(event.target.value); setCardIndex(0); setFlipped(false) }}
               placeholder="搜尋單字或意思"
               value={query}
             />
             {query && (
-              <button aria-label="清除搜尋" onClick={() => setQuery('')} type="button"><X size={15} /></button>
+              <button aria-label="清除搜尋" onClick={() => { setAutoPlay(false); setQuery('') }} type="button"><X size={15} /></button>
             )}
           </label>
           <select aria-label="選擇字根家族" onChange={(event) => applyRoot(event.target.value)} value={rootFilter}>
@@ -463,6 +529,33 @@ function App() {
             <option value="S">S · 無字根（{partSummary?.sWordCount ?? 0}）</option>
           </select>
         </div>
+        <div className={`autoplay-panel ${autoPlay ? 'is-playing' : ''}`}>
+          <button aria-pressed={autoPlay} className="autoplay-toggle" onClick={toggleAutoPlay} type="button">
+            {autoPlay ? <Pause size={18} /> : <Play size={18} />}
+            <span>
+              <strong>{autoPlay ? '暫停自動連播' : '開始自動連播'}</strong>
+              <small>先看單字，後半自動翻到解釋</small>
+            </span>
+          </button>
+          <label className="duration-control">
+            <Timer size={17} aria-hidden="true" />
+            <span>每字</span>
+            <select
+              aria-label="選擇每個單字停留秒數"
+              onChange={(event) => changeCardDuration(Number(event.target.value))}
+              value={cardDuration}
+            >
+              {AUTOPLAY_OPTIONS.map((seconds) => (
+                <option key={seconds} value={seconds}>{seconds} 秒</option>
+              ))}
+            </select>
+          </label>
+        </div>
+        {autoPlay && activeWord && (
+          <div className="autoplay-timeline" aria-label={`這張字卡停留 ${cardDuration} 秒`}>
+            <span key={`${activeWord.id}-${cardDuration}`} style={{ animationDuration: `${cardDuration}s` }} />
+          </div>
+        )}
       </section>
 
       {activeWord ? (

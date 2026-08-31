@@ -46,6 +46,18 @@
 .search-box input { width: 100%; min-width: 0; border: 0; outline: 0; background: transparent; color: var(--ink); font-size: .78rem; }
 .search-box button { display: grid; flex: 0 0 28px; height: 28px; place-items: center; border: 0; background: transparent; color: var(--muted); cursor: pointer; }
 .filter-row select { min-width: 0; border: 1px solid var(--line-dark); border-radius: 0; outline: 0; background: var(--card); color: var(--ink); font-size: .75rem; padding: 0 10px; }
+.autoplay-panel { display: grid; grid-template-columns: minmax(0, 1fr) auto; margin-top: 10px; border: 1px solid var(--line-dark); background: var(--card); }
+.autoplay-toggle { display: flex; min-height: 54px; align-items: center; gap: 11px; padding: 8px 14px; border: 0; border-right: 1px solid var(--line-dark); background: transparent; color: var(--ink); cursor: pointer; }
+.autoplay-toggle > span { display: grid; gap: 2px; text-align: left; }
+.autoplay-toggle strong { font-size: .76rem; }
+.autoplay-toggle small { color: var(--muted); font-size: .62rem; }
+.autoplay-panel.is-playing .autoplay-toggle { background: var(--green); color: var(--card); }
+.autoplay-panel.is-playing .autoplay-toggle small { color: color-mix(in srgb, var(--card) 76%, transparent); }
+.duration-control { display: flex; min-height: 54px; align-items: center; gap: 7px; padding: 0 10px 0 12px; color: var(--muted); font-size: .7rem; font-weight: 750; }
+.duration-control select { min-height: 34px; border: 0; border-left: 1px solid var(--line); border-radius: 0; outline: 0; background: var(--card); color: var(--ink); cursor: pointer; font-size: .75rem; font-weight: 750; padding: 0 4px 0 9px; }
+.autoplay-timeline { height: 3px; overflow: hidden; background: var(--line); }
+.autoplay-timeline span { display: block; width: 100%; height: 100%; background: var(--green); transform-origin: left; animation: autoplay-countdown linear forwards; }
+@keyframes autoplay-countdown { to { transform: scaleX(0); } }
 .study-stage { display: flex; flex: 1; flex-direction: column; justify-content: center; padding-top: 22px; }
 .flashcard { position: relative; display: block; width: 100%; min-height: min(570px, 65svh); overflow: hidden; border: 1px solid var(--ink); border-radius: 3px; background: var(--card); color: var(--ink); cursor: pointer; text-align: left; box-shadow: 8px 8px 0 var(--line-dark); }
 .flashcard:focus-visible { outline: 3px solid color-mix(in srgb, var(--green) 35%, transparent); outline-offset: 4px; }
@@ -119,6 +131,9 @@
   .card-nav { padding-top: 16px; }
   .filter-row { grid-template-columns: 1fr; }
   .filter-row select { min-height: 42px; }
+  .autoplay-panel { grid-template-columns: 1fr; }
+  .autoplay-toggle { border-right: 0; border-bottom: 1px solid var(--line-dark); }
+  .duration-control { justify-content: center; }
   .recall-actions { gap: 6px; padding-top: 16px; }
   .recall-actions button { min-height: 56px; gap: 5px; padding: 0 5px; }
   .recall-actions span { font-size: .7rem; }
