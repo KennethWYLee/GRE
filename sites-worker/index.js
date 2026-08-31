@@ -27,9 +27,22 @@ async function getPronunciation(requestUrl) {
   }
 
   try {
+    const directUsRecording = await findGoogleDictionaryUsRecording(word)
+    if (directUsRecording) {
+      return json({
+        audio: directUsRecording,
+        accent: 'en-US',
+        phonetic: null,
+        source: 'google-dictionary',
+      })
+    }
+
     const response = await fetch(
       `https://api.dictionaryapi.dev/api/v2/entries/en/${encodeURIComponent(word)}`,
-      { headers: { accept: 'application/json' } },
+      {
+        headers: { accept: 'application/json' },
+        signal: AbortSignal.timeout(2200),
+      },
     )
     if (!response.ok) return json({ audio: null, accent: null, source: null })
 
@@ -56,6 +69,34 @@ async function getPronunciation(requestUrl) {
   } catch {
     return json({ audio: null, accent: null, source: null })
   }
+}
+
+async function findGoogleDictionaryUsRecording(word) {
+  const normalized = word.toLocaleLowerCase().replace(/\s+/g, '_')
+  const candidates = [1, 2, 3].map(
+    (index) =>
+      `https://ssl.gstatic.com/dictionary/static/sounds/20200429/${encodeURIComponent(normalized)}--_us_${index}.mp3`,
+  )
+  const checks = await Promise.allSettled(
+    candidates.map((audio) =>
+      fetch(audio, {
+        method: 'HEAD',
+        signal: AbortSignal.timeout(1800),
+      }),
+    ),
+  )
+
+  for (let index = 0; index < checks.length; index += 1) {
+    const check = checks[index]
+    if (
+      check.status === 'fulfilled' &&
+      check.value.ok &&
+      (check.value.headers.get('content-type') ?? '').startsWith('audio/')
+    ) {
+      return candidates[index]
+    }
+  }
+  return null
 }
 
 function normalizeAudioUrl(value) {
