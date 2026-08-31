@@ -1,14 +1,16 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   ArrowLeft,
   Check,
   ChevronLeft,
   ChevronRight,
   CircleHelp,
+  LoaderCircle,
   RotateCcw,
   Search,
   Shuffle,
   Sprout,
+  Volume2,
   X,
 } from 'lucide-react'
 import { Button } from './components/ui/button'
@@ -16,6 +18,7 @@ import './App.css'
 
 type RecallState = 'again' | 'hard' | 'known'
 type StudyMode = 'all' | 'review' | 'known'
+type PronunciationStatus = 'idle' | 'loading' | 'recording' | 'device' | 'unavailable'
 
 type PartSummary = {
   id: number
@@ -60,6 +63,8 @@ type MemoryStore = {
 }
 
 const STORAGE_KEY = 'gre-roots-progress-v1'
+const SILENT_AUDIO =
+  'data:audio/wav;base64,UklGRiYAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQIAAACAgA=='
 
 function loadMemory(): MemoryStore {
   try {
@@ -83,7 +88,103 @@ function App() {
   const [shuffleOrder, setShuffleOrder] = useState<string[]>([])
   const [memory, setMemory] = useState<MemoryStore>(loadMemory)
   const [error, setError] = useState('')
+  const [pronunciationStatus, setPronunciationStatus] = useState<PronunciationStatus>('idle')
   const touchStartX = useRef<number | null>(null)
+  const audioRef = useRef<HTMLAudioElement | null>(null)
+  const audioUnlockedRef = useRef(false)
+  const pronunciationRequestRef = useRef(0)
+  const pronunciationCacheRef = useRef(new Map<string, Promise<string | null>>())
+
+  const unlockAudio = useCallback(() => {
+    if (audioUnlockedRef.current) return
+    const silent = new Audio(SILENT_AUDIO)
+    silent.volume = 0.01
+    void silent.play()
+      .then(() => { audioUnlockedRef.current = true })
+      .catch(() => undefined)
+  }, [])
+
+  const findRecording = useCallback((word: string) => {
+    const key = word.toLocaleLowerCase()
+    const cached = pronunciationCacheRef.current.get(key)
+    if (cached) return cached
+
+    const request = fetch(`/api/pronunciation?word=${encodeURIComponent(word)}`)
+      .then((response) => response.ok ? response.json() : null)
+      .then((payload) => typeof payload?.audio === 'string' ? payload.audio : null)
+      .catch(() => null)
+    pronunciationCacheRef.current.set(key, request)
+    return request
+  }, [])
+
+  const speakWithDevice = useCallback((word: string, requestId: number) => {
+    if (!('speechSynthesis' in window)) {
+      if (requestId === pronunciationRequestRef.current) setPronunciationStatus('unavailable')
+      return
+    }
+
+    const synth = window.speechSynthesis
+    synth.cancel()
+    const utterance = new SpeechSynthesisUtterance(word)
+    const voices = synth.getVoices().filter((voice) => voice.lang.toLocaleLowerCase().startsWith('en-us'))
+    utterance.voice =
+      voices.find((voice) => /samantha|ava|jenny|aria|joanna|natural|google us english/i.test(voice.name)) ??
+      voices[0] ??
+      null
+    utterance.lang = 'en-US'
+    utterance.rate = 0.88
+    utterance.pitch = 1
+    utterance.onstart = () => {
+      if (requestId === pronunciationRequestRef.current) setPronunciationStatus('device')
+    }
+    utterance.onerror = () => {
+      if (requestId === pronunciationRequestRef.current) setPronunciationStatus('unavailable')
+    }
+    synth.speak(utterance)
+    if (requestId === pronunciationRequestRef.current) setPronunciationStatus('device')
+  }, [])
+
+  const playPronunciation = useCallback(async (word: string) => {
+    const requestId = pronunciationRequestRef.current + 1
+    pronunciationRequestRef.current = requestId
+    setPronunciationStatus('loading')
+
+    if (audioRef.current) {
+      audioRef.current.pause()
+      audioRef.current.currentTime = 0
+    }
+    window.speechSynthesis?.cancel()
+
+    const recording = await findRecording(word)
+    if (requestId !== pronunciationRequestRef.current) return
+
+    if (recording) {
+      try {
+        const audio = audioRef.current ?? new Audio()
+        audioRef.current = audio
+        audio.src = recording
+        audio.preload = 'auto'
+        audio.playbackRate = 0.96
+        audio.onplay = () => {
+          if (requestId === pronunciationRequestRef.current) setPronunciationStatus('recording')
+        }
+        audio.onerror = () => speakWithDevice(word, requestId)
+        await audio.play()
+        return
+      } catch {
+        // A missing recording or an autoplay restriction falls back to the device's US voice.
+      }
+    }
+
+    speakWithDevice(word, requestId)
+  }, [findRecording, speakWithDevice])
+
+  const stopPronunciation = useCallback(() => {
+    pronunciationRequestRef.current += 1
+    audioRef.current?.pause()
+    window.speechSynthesis?.cancel()
+    setPronunciationStatus('idle')
+  }, [])
 
   useEffect(() => {
     fetch(`${import.meta.env.BASE_URL}data/vocabulary.json`)
@@ -131,6 +232,25 @@ function App() {
   }, [memory.recall, partWords, query, rootFilter, shuffleOrder, studyMode])
 
   const activeWord = filteredWords[cardIndex]
+
+  useEffect(() => {
+    if (!data) return
+    for (const part of data.parts) {
+      const firstWord = data.words.find((word) => word.part === part.id)
+      if (firstWord) void findRecording(firstWord.word)
+    }
+  }, [data, findRecording])
+
+  useEffect(() => {
+    if (!activeWord) return
+    const timeout = window.setTimeout(() => {
+      void playPronunciation(activeWord.word)
+    }, 80)
+    return () => window.clearTimeout(timeout)
+  }, [activeWord, playPronunciation])
+
+  useEffect(() => stopPronunciation, [stopPronunciation])
+
   const rootsForPart = useMemo(
     () => data?.rootGroups.filter((group) => group.part === selectedPart) ?? [],
     [data, selectedPart],
@@ -140,6 +260,7 @@ function App() {
     data?.words.filter((word) => word.part === part && memory.recall[word.id] === 'known').length ?? 0
 
   const openPart = (part: number) => {
+    unlockAudio()
     setSelectedPart(part)
     setStudyMode('all')
     setRootFilter('all')
@@ -151,6 +272,7 @@ function App() {
 
   const moveCard = (direction: -1 | 1) => {
     if (!filteredWords.length) return
+    unlockAudio()
     const next = Math.min(Math.max(cardIndex + direction, 0), filteredWords.length - 1)
     setCardIndex(next)
     setFlipped(false)
@@ -174,18 +296,21 @@ function App() {
   }
 
   const applyMode = (mode: StudyMode) => {
+    unlockAudio()
     setStudyMode(mode)
     setCardIndex(0)
     setFlipped(false)
   }
 
   const applyRoot = (root: string) => {
+    unlockAudio()
     setRootFilter(root)
     setCardIndex(0)
     setFlipped(false)
   }
 
   const shuffleDeck = () => {
+    unlockAudio()
     const shuffled = [...partWords.map((word) => word.id)]
     for (let index = shuffled.length - 1; index > 0; index -= 1) {
       const target = Math.floor(Math.random() * (index + 1))
@@ -194,6 +319,11 @@ function App() {
     setShuffleOrder(shuffled)
     setCardIndex(0)
     setFlipped(false)
+  }
+
+  const returnHome = () => {
+    stopPronunciation()
+    setSelectedPart(null)
   }
 
   useEffect(() => {
@@ -238,7 +368,7 @@ function App() {
           <p className="eyebrow">MASON 2000 · ROOT DECK</p>
           <h1>選一份，開始把字<br />連成有意義的家族。</h1>
           <p className="intro-copy">
-            五份各約 415 字；同字根不拆散，無字根字平均穿插。每次只專心處理眼前這張。
+            五份各約 415 字；同字根不拆散，無字根字平均穿插。進入每張卡會自動播放美式發音。
           </p>
         </section>
 
@@ -274,11 +404,17 @@ function App() {
 
   const partSummary = data.parts.find((part) => part.id === selectedPart)
   const currentRecall = activeWord ? memory.recall[activeWord.id] : undefined
+  const pronunciationLabel =
+    pronunciationStatus === 'recording' ? '美式真人發音' :
+    pronunciationStatus === 'device' ? '美式裝置發音' :
+    pronunciationStatus === 'loading' ? '載入美式發音' :
+    pronunciationStatus === 'unavailable' ? '重新播放發音' :
+    '播放美式發音'
 
   return (
     <main className="app-shell study-shell">
       <header className="study-header">
-        <Button aria-label="回到選份頁" className="icon-button" onClick={() => setSelectedPart(null)} size="icon" variant="ghost">
+        <Button aria-label="回到選份頁" className="icon-button" onClick={returnHome} size="icon" variant="ghost">
           <ArrowLeft size={20} />
         </Button>
         <div className="study-title">
@@ -331,7 +467,7 @@ function App() {
 
       {activeWord ? (
         <section className="study-stage">
-          <button
+          <div
             aria-label={flipped ? '查看單字正面' : '查看單字解釋'}
             className={`flashcard ${flipped ? 'is-flipped' : ''}`}
             onClick={() => setFlipped((value) => !value)}
@@ -342,7 +478,7 @@ function App() {
               touchStartX.current = null
             }}
             onTouchStart={(event) => { touchStartX.current = event.touches[0].clientX }}
-            type="button"
+            role="group"
           >
             {!flipped ? (
               <div className="card-front">
@@ -355,6 +491,21 @@ function App() {
                 <div className="word-block">
                   <h2>{activeWord.word}</h2>
                   {activeWord.pronunciation && <p>/{activeWord.pronunciation}/</p>}
+                  <button
+                    aria-label={`重播 ${activeWord.word} 的美式發音`}
+                    className={`pronounce-button status-${pronunciationStatus}`}
+                    onClick={(event) => {
+                      event.stopPropagation()
+                      unlockAudio()
+                      void playPronunciation(activeWord.word)
+                    }}
+                    type="button"
+                  >
+                    {pronunciationStatus === 'loading' ?
+                      <LoaderCircle className="pronounce-spinner" size={17} /> :
+                      <Volume2 size={17} />}
+                    <span aria-live="polite">{pronunciationLabel}</span>
+                  </button>
                 </div>
                 <p className="flip-hint"><RotateCcw size={14} /> 輕觸翻面 · 左右滑動換字</p>
               </div>
@@ -382,7 +533,7 @@ function App() {
                 )}
               </div>
             )}
-          </button>
+          </div>
 
           {flipped ? (
             <div className="recall-actions" aria-label="評估記憶程度">

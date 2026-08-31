@@ -10,7 +10,8 @@
     "preview": "vite preview",
     "data:export": "node scripts/export-vocabulary.mjs",
     "data:validate": "node scripts/validate-data.mjs",
-    "check": "pnpm run lint && pnpm run data:validate && pnpm run build"
+    "pronunciation:validate": "node scripts/validate-pronunciation.mjs",
+    "check": "pnpm run lint && pnpm run data:validate && pnpm run pronunciation:validate && pnpm run build"
   },
   "dependencies": {
     "@radix-ui/react-slot": "^1.3.3",
