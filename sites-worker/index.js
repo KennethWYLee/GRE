@@ -1,6 +1,9 @@
+import vocabularyData from '../data/vocabulary.json' with { type: 'json' }
+
 export const ADMIN_EMAILS = ['wy.lee@ntub.edu.tw', 'kenneth.wy.lee21@gmail.com']
 export const ACCESS_STATUSES = ['pending', 'approved', 'rejected', 'revoked']
 
+const VOCABULARY_JSON = JSON.stringify(vocabularyData)
 let schemaReadyPromise = null
 
 export default {
@@ -137,15 +140,13 @@ async function requireAdmin(request, env) {
 async function serveVocabulary(request, env) {
   const access = await requireApproved(request, env)
   if (access.response) return access.response
-  if (!env.ASSETS?.fetch) return json({ error: 'assets_unavailable' }, 500)
-
-  const dataUrl = new URL('/data/vocabulary.json', request.url)
-  const assetResponse = await env.ASSETS.fetch(new Request(dataUrl, { method: 'GET' }))
-  if (!assetResponse.ok) return json({ error: 'vocabulary_unavailable' }, 502)
-
-  const headers = new Headers(assetResponse.headers)
-  headers.set('cache-control', 'private, max-age=3600')
-  return new Response(assetResponse.body, { status: assetResponse.status, headers })
+  return new Response(VOCABULARY_JSON, {
+    headers: {
+      'content-type': 'application/json; charset=utf-8',
+      'cache-control': 'private, max-age=3600',
+      'x-content-type-options': 'nosniff',
+    },
+  })
 }
 
 async function listAccounts(request, env) {

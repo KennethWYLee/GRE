@@ -1,7 +1,7 @@
 import fs from "node:fs/promises";
 
 const data = JSON.parse(
-  await fs.readFile(new URL("../public/data/vocabulary.json", import.meta.url), "utf8"),
+  await fs.readFile(new URL("../data/vocabulary.json", import.meta.url), "utf8"),
 );
 
 function assert(condition, message) {

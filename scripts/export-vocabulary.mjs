@@ -13,7 +13,7 @@ const workbookPath =
     "kuo_vocab_20260831",
     "Mason_2000_2025_5Parts_Root_Complete.xlsx",
   );
-const outputPath = path.resolve(projectDir, "public", "data", "vocabulary.json");
+const outputPath = path.resolve(projectDir, "data", "vocabulary.json");
 
 const expectedHeaders = [
   "No.",

@@ -87,20 +87,7 @@ function signedRequest(path, email, options = {}) {
 }
 
 const DB = new FakeD1()
-const env = {
-  DB,
-  ASSETS: {
-    async fetch(request) {
-      const url = new URL(request.url)
-      if (url.pathname === '/data/vocabulary.json') {
-        return new Response(JSON.stringify({ meta: { totalWords: 2078 } }), {
-          headers: { 'content-type': 'application/json' },
-        })
-      }
-      return new Response('not found', { status: 404 })
-    },
-  },
-}
+const env = { DB }
 
 for (const email of ADMIN_EMAILS) {
   const access = resolveAccess(email)
@@ -110,6 +97,8 @@ if (resolveAccess('kenneth.wy.lee21@gamil.com').isAdmin) throw new Error('Misspe
 
 const anonymousSession = await worker.fetch(new Request('https://gre.example.test/api/session'), env)
 if ((await anonymousSession.json()).authenticated !== false) throw new Error('Anonymous session was not rejected')
+const anonymousDirectData = await worker.fetch(new Request('https://gre.example.test/data/vocabulary.json'), env)
+if (anonymousDirectData.status !== 401) throw new Error('Direct vocabulary URL bypassed sign-in')
 
 const pendingEmail = 'learner@example.com'
 const pendingSession = await worker.fetch(signedRequest('/api/session', pendingEmail), env)
@@ -122,6 +111,7 @@ if (blockedVocabulary.status !== 403) throw new Error(`Pending learner got vocab
 const adminEmail = ADMIN_EMAILS[0]
 const approvedVocabulary = await worker.fetch(signedRequest('/api/vocabulary', adminEmail), env)
 if (approvedVocabulary.status !== 200) throw new Error(`Admin vocabulary failed: ${approvedVocabulary.status}`)
+if ((await approvedVocabulary.json()).meta.totalWords !== 2078) throw new Error('Approved vocabulary payload is invalid')
 
 const approval = await worker.fetch(signedRequest(`/api/admin/accounts/${encodeURIComponent(pendingEmail)}`, adminEmail, {
   method: 'POST',

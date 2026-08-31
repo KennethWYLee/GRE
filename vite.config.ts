@@ -36,7 +36,7 @@ function localAccessApi() {
             return
           }
           response.setHeader('content-type', 'application/json; charset=utf-8')
-          response.end(await readFile(new URL('./public/data/vocabulary.json', import.meta.url)))
+          response.end(await readFile(new URL('./data/vocabulary.json', import.meta.url)))
           return
         }
 
