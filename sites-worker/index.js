@@ -1,8 +1,38 @@
+export const ADMIN_EMAILS = ['wy.lee@ntub.edu.tw', 'kenneth.wy.lee21@gmail.com']
+export const ACCESS_STATUSES = ['pending', 'approved', 'rejected', 'revoked']
+
+let schemaReadyPromise = null
+
 export default {
   async fetch(request, env) {
     const requestUrl = new URL(request.url)
-    if (requestUrl.pathname === '/api/pronunciation') {
-      return getPronunciation(requestUrl)
+
+    try {
+      if (requestUrl.pathname === '/api/session') {
+        return json(await getSession(request, env))
+      }
+
+      if (requestUrl.pathname === '/api/vocabulary' || requestUrl.pathname === '/data/vocabulary.json') {
+        return serveVocabulary(request, env)
+      }
+
+      if (requestUrl.pathname === '/api/pronunciation') {
+        const access = await requireApproved(request, env)
+        if (access.response) return access.response
+        return getPronunciation(requestUrl)
+      }
+
+      if (requestUrl.pathname === '/api/admin/accounts' && request.method === 'GET') {
+        return listAccounts(request, env)
+      }
+
+      const accountMatch = requestUrl.pathname.match(/^\/api\/admin\/accounts\/([^/]+)$/)
+      if (accountMatch && request.method === 'POST') {
+        return updateAccount(request, env, decodeURIComponent(accountMatch[1]))
+      }
+    } catch (error) {
+      console.error('GRE Roots request failed', error)
+      return json({ error: 'service_unavailable', message: '服務暫時無法使用，請稍後再試。' }, 503)
     }
 
     if (!env.ASSETS?.fetch) {
@@ -18,6 +48,213 @@ export default {
     const indexUrl = new URL('/index.html', request.url)
     return env.ASSETS.fetch(new Request(indexUrl, request))
   },
+}
+
+export function normalizeEmail(value) {
+  return String(value ?? '').trim().toLocaleLowerCase()
+}
+
+export function resolveAccess(email, storedStatus = 'pending') {
+  const normalizedEmail = normalizeEmail(email)
+  const isAdmin = ADMIN_EMAILS.includes(normalizedEmail)
+  return {
+    email: normalizedEmail,
+    isAdmin,
+    role: isAdmin ? 'admin' : 'member',
+    status: isAdmin ? 'approved' : ACCESS_STATUSES.includes(storedStatus) ? storedStatus : 'pending',
+  }
+}
+
+async function getSession(request, env) {
+  const identity = readIdentity(request)
+  if (!identity) return { authenticated: false }
+
+  await ensureAccountSchema(env)
+  const access = resolveAccess(identity.email)
+
+  if (access.isAdmin) {
+    await env.DB.prepare(
+      `INSERT INTO account_access (
+        email, user_id, full_name, status, role, requested_at, reviewed_at, reviewed_by, last_seen_at
+      ) VALUES (?, ?, ?, 'approved', 'admin', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 'system', CURRENT_TIMESTAMP)
+      ON CONFLICT(email) DO UPDATE SET
+        user_id = excluded.user_id,
+        full_name = excluded.full_name,
+        status = 'approved',
+        role = 'admin',
+        last_seen_at = CURRENT_TIMESTAMP`,
+    ).bind(access.email, identity.userId, identity.fullName).run()
+  } else {
+    await env.DB.prepare(
+      `INSERT INTO account_access (
+        email, user_id, full_name, status, role, requested_at, last_seen_at
+      ) VALUES (?, ?, ?, 'pending', 'member', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+      ON CONFLICT(email) DO UPDATE SET
+        user_id = excluded.user_id,
+        full_name = excluded.full_name,
+        last_seen_at = CURRENT_TIMESTAMP`,
+    ).bind(access.email, identity.userId, identity.fullName).run()
+  }
+
+  const account = await env.DB.prepare(
+    `SELECT email, full_name, status, role, requested_at, reviewed_at, reviewed_by
+     FROM account_access WHERE email = ?`,
+  ).bind(access.email).first()
+
+  const resolved = resolveAccess(account?.email ?? access.email, account?.status)
+  return {
+    authenticated: true,
+    email: resolved.email,
+    fullName: account?.full_name || identity.fullName || resolved.email,
+    status: resolved.status,
+    isAdmin: resolved.isAdmin,
+    role: resolved.role,
+    requestedAt: account?.requested_at ?? null,
+    reviewedAt: account?.reviewed_at ?? null,
+  }
+}
+
+async function requireApproved(request, env) {
+  const session = await getSession(request, env)
+  if (!session.authenticated) {
+    return { response: json({ error: 'sign_in_required', session }, 401) }
+  }
+  if (session.status !== 'approved') {
+    return { response: json({ error: 'approval_required', session }, 403) }
+  }
+  return { session }
+}
+
+async function requireAdmin(request, env) {
+  const access = await requireApproved(request, env)
+  if (access.response) return access
+  if (!access.session.isAdmin) {
+    return { response: json({ error: 'admin_required' }, 403) }
+  }
+  return access
+}
+
+async function serveVocabulary(request, env) {
+  const access = await requireApproved(request, env)
+  if (access.response) return access.response
+  if (!env.ASSETS?.fetch) return json({ error: 'assets_unavailable' }, 500)
+
+  const dataUrl = new URL('/data/vocabulary.json', request.url)
+  const assetResponse = await env.ASSETS.fetch(new Request(dataUrl, { method: 'GET' }))
+  if (!assetResponse.ok) return json({ error: 'vocabulary_unavailable' }, 502)
+
+  const headers = new Headers(assetResponse.headers)
+  headers.set('cache-control', 'private, max-age=3600')
+  return new Response(assetResponse.body, { status: assetResponse.status, headers })
+}
+
+async function listAccounts(request, env) {
+  const access = await requireAdmin(request, env)
+  if (access.response) return access.response
+
+  const result = await env.DB.prepare(
+    `SELECT email, full_name, status, role, requested_at, reviewed_at, reviewed_by, last_seen_at
+     FROM account_access
+     ORDER BY
+       CASE role WHEN 'admin' THEN 0 ELSE 1 END,
+       CASE status WHEN 'pending' THEN 0 WHEN 'approved' THEN 1 WHEN 'rejected' THEN 2 ELSE 3 END,
+       requested_at DESC`,
+  ).all()
+
+  return json({ accounts: result.results ?? [] })
+}
+
+async function updateAccount(request, env, rawEmail) {
+  const access = await requireAdmin(request, env)
+  if (access.response) return access.response
+  if (!isTrustedOrigin(request)) return json({ error: 'invalid_origin' }, 403)
+  if (!(request.headers.get('content-type') ?? '').toLocaleLowerCase().includes('application/json')) {
+    return json({ error: 'json_required' }, 415)
+  }
+
+  const email = normalizeEmail(rawEmail)
+  if (!email || ADMIN_EMAILS.includes(email)) return json({ error: 'protected_admin' }, 400)
+
+  const payload = await request.json().catch(() => null)
+  const status = payload?.status
+  if (!ACCESS_STATUSES.includes(status) || status === 'pending') {
+    return json({ error: 'invalid_status' }, 400)
+  }
+
+  const result = await env.DB.prepare(
+    `UPDATE account_access
+     SET status = ?, reviewed_at = CURRENT_TIMESTAMP, reviewed_by = ?
+     WHERE email = ? AND role = 'member'`,
+  ).bind(status, access.session.email, email).run()
+
+  if (!result.meta?.changes) return json({ error: 'account_not_found' }, 404)
+  return json({ ok: true, email, status })
+}
+
+function readIdentity(request) {
+  const email = normalizeEmail(request.headers.get('oai-authenticated-user-email'))
+  const userId = (request.headers.get('oai-authenticated-user-id') ?? '').trim()
+  if (!email || !userId) return null
+
+  const encodedName = request.headers.get('oai-authenticated-user-full-name') ?? ''
+  const encoding = request.headers.get('oai-authenticated-user-full-name-encoding')
+  let fullName = encodedName
+  if (encodedName && encoding === 'percent-encoded-utf-8') {
+    try {
+      fullName = decodeURIComponent(encodedName)
+    } catch {
+      fullName = ''
+    }
+  }
+
+  return { email, userId, fullName: fullName.trim() }
+}
+
+async function ensureAccountSchema(env) {
+  if (!env.DB?.prepare) throw new Error('D1 binding DB is unavailable')
+  if (!schemaReadyPromise) schemaReadyPromise = initializeAccountSchema(env.DB)
+  try {
+    await schemaReadyPromise
+  } catch (error) {
+    schemaReadyPromise = null
+    throw error
+  }
+}
+
+async function initializeAccountSchema(db) {
+  await db.prepare(
+    `CREATE TABLE IF NOT EXISTS account_access (
+      email TEXT PRIMARY KEY COLLATE NOCASE,
+      user_id TEXT,
+      full_name TEXT,
+      status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'rejected', 'revoked')),
+      role TEXT NOT NULL DEFAULT 'member' CHECK (role IN ('admin', 'member')),
+      requested_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      reviewed_at TEXT,
+      reviewed_by TEXT,
+      last_seen_at TEXT
+    )`,
+  ).run()
+
+  await db.batch([
+    db.prepare(
+      `CREATE INDEX IF NOT EXISTS idx_account_access_status_requested
+       ON account_access(status, requested_at)`,
+    ),
+    ...ADMIN_EMAILS.map((email) =>
+      db.prepare(
+        `INSERT INTO account_access (
+          email, status, role, requested_at, reviewed_at, reviewed_by
+        ) VALUES (?, 'approved', 'admin', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 'system')
+        ON CONFLICT(email) DO UPDATE SET status = 'approved', role = 'admin'`,
+      ).bind(email),
+    ),
+  ])
+}
+
+function isTrustedOrigin(request) {
+  const origin = request.headers.get('origin')
+  return !origin || origin === new URL(request.url).origin
 }
 
 async function getPronunciation(requestUrl) {
@@ -119,7 +356,8 @@ function json(payload, status = 200) {
     status,
     headers: {
       'content-type': 'application/json; charset=utf-8',
-      'cache-control': 'public, max-age=604800',
+      'cache-control': 'no-store',
+      'x-content-type-options': 'nosniff',
     },
   })
 }

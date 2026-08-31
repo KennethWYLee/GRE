@@ -12,8 +12,38 @@ try {
   }
 
   const response = await worker.fetch(
-    new Request('https://gre.example.test/api/pronunciation?word=temerity'),
-    {},
+    new Request('https://gre.example.test/api/pronunciation?word=temerity', {
+      headers: {
+        'oai-authenticated-user-email': 'wy.lee@ntub.edu.tw',
+        'oai-authenticated-user-id': 'admin-test-id',
+      },
+    }),
+    {
+      DB: {
+        prepare(sql) {
+          const statement = {
+            values: [],
+            bind(...values) { this.values = values; return this },
+            async run() { return { meta: { changes: 1 } } },
+            async first() {
+              if (!sql.includes('SELECT email')) return null
+              return {
+                email: 'wy.lee@ntub.edu.tw',
+                full_name: 'Test Admin',
+                status: 'approved',
+                role: 'admin',
+                requested_at: '2026-09-01 00:00:00',
+                reviewed_at: '2026-09-01 00:00:00',
+              }
+            },
+          }
+          return statement
+        },
+        async batch(statements) {
+          return Promise.all(statements.map((statement) => statement.run()))
+        },
+      },
+    },
   )
   const payload = await response.json()
 

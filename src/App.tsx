@@ -6,17 +6,20 @@ import {
   ChevronRight,
   CircleHelp,
   LoaderCircle,
+  LogOut,
   Pause,
   Play,
   RotateCcw,
   Search,
   Shuffle,
+  ShieldCheck,
   Sprout,
   Timer,
   Volume2,
   X,
 } from 'lucide-react'
 import { Button } from './components/ui/button'
+import { AccountAccess, type ApprovedSession } from './AccountAccess'
 import './App.css'
 
 type RecallState = 'again' | 'hard' | 'known'
@@ -87,7 +90,13 @@ function loadAutoplaySeconds() {
   return AUTOPLAY_OPTIONS.includes(saved as (typeof AUTOPLAY_OPTIONS)[number]) ? saved : 8
 }
 
-function App() {
+function StudyApp({
+  onManageAccounts,
+  session,
+}: {
+  onManageAccounts: () => void
+  session: ApprovedSession
+}) {
   const [data, setData] = useState<VocabularyData | null>(null)
   const [selectedPart, setSelectedPart] = useState<number | null>(null)
   const [cardIndex, setCardIndex] = useState(0)
@@ -199,7 +208,7 @@ function App() {
   }, [])
 
   useEffect(() => {
-    fetch(`${import.meta.env.BASE_URL}data/vocabulary.json`)
+    fetch('/api/vocabulary')
       .then((response) => {
         if (!response.ok) throw new Error(`HTTP ${response.status}`)
         return response.json() as Promise<VocabularyData>
@@ -428,7 +437,17 @@ function App() {
             <span className="brand-mark"><Sprout size={18} /></span>
             GRE ROOTS
           </a>
-          <span className="word-total">已背 {totalKnown.toLocaleString()} · 剩 {totalRemaining.toLocaleString()}</span>
+          <div className="brand-actions">
+            <span className="word-total">已背 {totalKnown.toLocaleString()} · 剩 {totalRemaining.toLocaleString()}</span>
+            {session.isAdmin && (
+              <button aria-label="帳號審核" className="account-review-button" onClick={onManageAccounts} type="button">
+                <ShieldCheck size={15} /><span>帳號審核</span>
+              </button>
+            )}
+            <a aria-label="登出" className="account-signout" href="/signout-with-chatgpt?return_to=/" target="_top">
+              <LogOut size={16} />
+            </a>
+          </div>
         </header>
 
         <section className="intro">
@@ -445,7 +464,7 @@ function App() {
               <p className="section-kicker">TODAY'S DECK</p>
               <h2 id="part-heading">今天想背哪一份？</h2>
             </div>
-            <p>App 不另設帳號，進度只存在這支裝置</p>
+            <p>App 不另設密碼，進度只存在這支裝置</p>
           </div>
 
           <div className="part-grid">
@@ -689,6 +708,14 @@ function App() {
         </section>
       )}
     </main>
+  )
+}
+
+function App() {
+  return (
+    <AccountAccess>
+      {({ session, openAdmin }) => <StudyApp onManageAccounts={openAdmin} session={session} />}
+    </AccountAccess>
   )
 }
 

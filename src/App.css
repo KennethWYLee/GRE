@@ -4,6 +4,11 @@
 .brand-bar, .study-header { display: flex; min-height: 68px; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--line); }
 .brand { display: inline-flex; align-items: center; gap: 10px; color: var(--ink); font-size: .78rem; font-weight: 800; letter-spacing: .16em; text-decoration: none; }
 .brand-mark { display: grid; width: 32px; height: 32px; place-items: center; border: 1px solid var(--ink); border-radius: 50%; }
+.brand-actions { display: flex; align-items: center; gap: 10px; }
+.account-review-button, .account-signout { display: inline-flex; min-height: 34px; align-items: center; justify-content: center; gap: 6px; border: 1px solid var(--ink); background: transparent; color: var(--ink); cursor: pointer; font-size: .68rem; font-weight: 800; text-decoration: none; }
+.account-review-button { padding: 0 10px; }
+.account-signout { width: 34px; }
+.account-review-button:hover, .account-review-button:focus-visible, .account-signout:hover, .account-signout:focus-visible { background: var(--ink); color: var(--card); outline: none; }
 .word-total, .section-heading > p { color: var(--muted); font-size: .76rem; }
 .intro { max-width: 760px; padding: 66px 0 72px; }
 .eyebrow, .section-kicker { margin: 0 0 18px; color: var(--green); font-size: .7rem; font-weight: 800; letter-spacing: .17em; }
@@ -119,6 +124,59 @@
 .loading-mark { color: var(--green); animation: breathe 1.6s ease-in-out infinite; }
 @keyframes breathe { 50% { transform: translateY(-4px); } }
 
+.access-shell { display: grid; min-height: 100svh; place-items: center; padding: 24px 16px; }
+.access-card { width: min(100%, 520px); padding: clamp(28px, 7vw, 52px); border: 1px solid var(--ink); background: var(--card); box-shadow: 8px 8px 0 var(--line-dark); }
+.access-brand { display: flex; align-items: center; gap: 9px; color: var(--ink); font-size: .7rem; font-weight: 850; letter-spacing: .15em; }
+.access-brand span { display: grid; width: 30px; height: 30px; place-items: center; border: 1px solid var(--ink); border-radius: 50%; }
+.access-icon { display: grid; width: 48px; height: 48px; margin-top: 54px; place-items: center; border: 1px solid var(--green); color: var(--green); }
+.access-kicker { margin: 20px 0 0; color: var(--green); font-size: .65rem; font-weight: 850; letter-spacing: .15em; }
+.access-card h1 { margin: 10px 0 0; font-family: var(--display); font-size: clamp(2rem, 8vw, 3.1rem); font-weight: 550; letter-spacing: -.04em; line-height: 1.02; }
+.access-content { display: grid; gap: 14px; margin-top: 24px; }
+.access-content > p { margin: 0; color: var(--muted); font-size: .86rem; line-height: 1.7; }
+.access-content > small { color: var(--muted); font-size: .67rem; line-height: 1.55; }
+.access-primary, .access-secondary { display: inline-flex; min-height: 46px; align-items: center; justify-content: center; gap: 8px; border: 1px solid var(--ink); cursor: pointer; font-size: .75rem; font-weight: 850; text-decoration: none; }
+.access-primary { background: var(--ink); color: var(--card); }
+.access-primary:hover, .access-primary:focus-visible { background: var(--green); outline: none; }
+.access-secondary { background: transparent; color: var(--ink); }
+.access-secondary:hover, .access-secondary:focus-visible { background: var(--line); outline: none; }
+.access-email { overflow-wrap: anywhere; padding: 12px; border-left: 3px solid var(--green); background: var(--paper); color: var(--ink); font-size: .78rem; font-weight: 750; }
+
+.admin-shell { width: min(100%, 900px); min-height: 100svh; margin: 0 auto; padding: 0 20px 44px; }
+.admin-header { display: grid; min-height: 78px; grid-template-columns: 44px 1fr 44px; align-items: center; border-bottom: 1px solid var(--ink); }
+.admin-header > div { text-align: center; }
+.admin-header span { color: var(--green); font-size: .6rem; font-weight: 850; letter-spacing: .16em; }
+.admin-header h1 { margin: 2px 0 0; font-family: var(--display); font-size: 1.5rem; font-weight: 600; }
+.admin-back, .admin-signout { display: grid; width: 40px; height: 40px; place-items: center; border: 0; background: transparent; color: var(--ink); cursor: pointer; text-decoration: none; }
+.admin-back:hover, .admin-back:focus-visible, .admin-signout:hover, .admin-signout:focus-visible { background: var(--line); outline: none; }
+.admin-summary { display: grid; grid-template-columns: repeat(3, 1fr); margin-top: 22px; border: 1px solid var(--line-dark); background: var(--card); }
+.admin-summary > div { display: grid; gap: 4px; padding: 16px; border-right: 1px solid var(--line); text-align: center; }
+.admin-summary > div:last-child { border-right: 0; }
+.admin-summary span { color: var(--muted); font-size: .67rem; font-weight: 750; }
+.admin-summary strong { font-family: var(--display); font-size: 1.7rem; font-weight: 600; }
+.admin-toolbar { display: flex; min-height: 58px; align-items: center; justify-content: space-between; gap: 12px; border-bottom: 1px solid var(--line); }
+.admin-toolbar p { display: flex; min-width: 0; align-items: center; gap: 7px; margin: 0; overflow-wrap: anywhere; color: var(--muted); font-size: .7rem; }
+.admin-toolbar button { display: inline-flex; min-height: 34px; align-items: center; gap: 6px; border: 1px solid var(--line-dark); background: transparent; color: var(--ink); cursor: pointer; font-size: .68rem; font-weight: 750; padding: 0 10px; }
+.admin-error { margin: 14px 0 0; padding: 11px 13px; border-left: 3px solid #9f4635; background: color-mix(in srgb, #9f4635 8%, var(--card)); color: #823827; font-size: .75rem; }
+.admin-loading { display: flex; min-height: 180px; align-items: center; justify-content: center; gap: 9px; color: var(--muted); font-size: .78rem; }
+.account-list { border-top: 1px solid var(--ink); }
+.account-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 18px; align-items: center; padding: 18px 0; border-bottom: 1px solid var(--line); }
+.account-identity { display: grid; min-width: 0; gap: 4px; }
+.account-identity strong, .account-identity small { overflow-wrap: anywhere; }
+.account-identity strong { font-family: var(--display); font-size: 1.08rem; font-weight: 650; }
+.account-identity small { color: var(--muted); font-size: .7rem; }
+.account-identity time { color: var(--muted); font-size: .61rem; }
+.account-status { width: max-content; padding: 3px 7px; border: 1px solid var(--line-dark); color: var(--muted); font-size: .58rem; font-weight: 850; letter-spacing: .06em; }
+.account-status.status-approved { border-color: var(--green); color: var(--green); }
+.account-status.status-rejected, .account-status.status-revoked { border-color: #9f4635; color: #9f4635; }
+.account-actions { display: flex; align-items: center; gap: 7px; }
+.account-actions button, .protected-admin { display: inline-flex; min-height: 36px; align-items: center; justify-content: center; gap: 6px; padding: 0 10px; border: 1px solid var(--ink); background: transparent; color: var(--ink); font-size: .66rem; font-weight: 800; }
+.account-actions button { cursor: pointer; }
+.account-actions button:disabled { cursor: wait; opacity: .45; }
+.account-actions .approve-account:hover, .account-actions .approve-account:focus-visible { background: var(--green); color: var(--card); outline: none; }
+.account-actions .reject-account:hover, .account-actions .reject-account:focus-visible, .account-actions .revoke-account:hover, .account-actions .revoke-account:focus-visible { background: #9f4635; color: var(--card); outline: none; }
+.protected-admin { border-color: var(--green); color: var(--green); }
+.admin-footer { display: flex; align-items: center; justify-content: center; gap: 6px; padding-top: 18px; color: var(--muted); font-size: .63rem; }
+
 @media (max-width: 760px) {
   .intro { padding: 48px 0 52px; }
   .intro h1 br { display: none; }
@@ -133,6 +191,8 @@
   .part-progress { right: 70px; bottom: 12px; left: 78px; }
   .part-known { right: 42px; bottom: 5px; }
   .part-arrow { right: 10px; top: 50%; transform: translateY(-50%); }
+  .account-review-button span { display: none; }
+  .account-review-button { width: 34px; padding: 0; }
   .flashcard { min-height: min(520px, 66svh); box-shadow: 5px 5px 0 var(--line-dark); }
   .card-back { max-height: min(520px, 66svh); }
 }
@@ -140,6 +200,7 @@
 @media (max-width: 460px) {
   .home-shell { padding-inline: 16px; }
   .word-total { font-size: .68rem; }
+  .brand-actions { gap: 6px; }
   .part-meta { font-size: .67rem; }
   .study-stage { padding-top: 14px; }
   .card-front, .card-back { padding: 26px 22px; }
@@ -153,4 +214,12 @@
   .recall-actions button { min-height: 56px; gap: 5px; padding: 0 5px; }
   .recall-actions span { font-size: .7rem; }
   .recall-actions small { display: none; }
+  .access-card { box-shadow: 5px 5px 0 var(--line-dark); }
+  .admin-shell { padding-inline: 14px; }
+  .admin-summary > div { padding: 13px 5px; }
+  .admin-summary span { font-size: .61rem; }
+  .account-row { grid-template-columns: 1fr; gap: 12px; }
+  .account-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .account-actions button, .protected-admin { width: 100%; }
+  .protected-admin { grid-column: 1 / -1; }
 }
