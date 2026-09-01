@@ -25,6 +25,8 @@ import './App.css'
 type RecallState = 'again' | 'hard' | 'known'
 type StudyMode = 'all' | 'review' | 'known'
 type PronunciationStatus = 'idle' | 'loading' | 'recording' | 'device' | 'unavailable'
+type DeckId = 'words1000' | 'words2000'
+type SequenceMode = 'fixed' | 'random'
 
 type PartSummary = {
   id: number
@@ -57,7 +59,7 @@ type VocabularyWord = {
 }
 
 type VocabularyData = {
-  meta: { totalWords: number; totalRootGroups: number; totalSWords: number }
+  meta: { deckId: DeckId; title: string; totalWords: number; totalRootGroups: number; totalSWords: number }
   parts: PartSummary[]
   rootGroups: RootGroup[]
   words: VocabularyWord[]
@@ -68,7 +70,9 @@ type MemoryStore = {
   positions: Record<string, number>
 }
 
-const STORAGE_KEY = 'gre-roots-progress-v1'
+const LEGACY_STORAGE_KEY = 'gre-roots-progress-v1'
+const STORAGE_KEY_PREFIX = 'gre-roots-progress-v2'
+const SEQUENCE_MODE_KEY = 'gre-roots-sequence-mode-v1'
 const AUTOPLAY_SECONDS_KEY = 'gre-roots-autoplay-seconds-v1'
 const AUTOPLAY_OPTIONS = [3, 5, 8, 10, 15, 20, 30] as const
 const PRONUNCIATION_LOOKAHEAD = 20
@@ -78,15 +82,32 @@ const RECORDING_LOOKUP_TIMEOUT = Symbol('recording-lookup-timeout')
 const SILENT_AUDIO =
   'data:audio/wav;base64,UklGRiYAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQIAAACAgA=='
 
-function loadMemory(): MemoryStore {
+const EMPTY_MEMORY: MemoryStore = { recall: {}, positions: {} }
+
+function loadMemory(deckId: DeckId): MemoryStore {
   try {
-    const saved = window.localStorage.getItem(STORAGE_KEY)
+    const storageKey = `${STORAGE_KEY_PREFIX}-${deckId}`
+    const saved = window.localStorage.getItem(storageKey) ??
+      (deckId === 'words2000' ? window.localStorage.getItem(LEGACY_STORAGE_KEY) : null)
     if (!saved) return { recall: {}, positions: {} }
     const parsed = JSON.parse(saved) as Partial<MemoryStore>
     return { recall: parsed.recall ?? {}, positions: parsed.positions ?? {} }
   } catch {
     return { recall: {}, positions: {} }
   }
+}
+
+function loadSequenceMode(): SequenceMode {
+  return window.localStorage.getItem(SEQUENCE_MODE_KEY) === 'random' ? 'random' : 'fixed'
+}
+
+function shuffledWordIds(words: VocabularyWord[]) {
+  const shuffled = words.map((word) => word.id)
+  for (let index = shuffled.length - 1; index > 0; index -= 1) {
+    const target = Math.floor(Math.random() * (index + 1))
+    ;[shuffled[index], shuffled[target]] = [shuffled[target], shuffled[index]]
+  }
+  return shuffled
 }
 
 function loadAutoplaySeconds() {
@@ -102,6 +123,8 @@ function StudyApp({
   session: ApprovedSession
 }) {
   const [data, setData] = useState<VocabularyData | null>(null)
+  const [selectedDeck, setSelectedDeck] = useState<DeckId | null>(null)
+  const [sequenceMode, setSequenceMode] = useState<SequenceMode>(loadSequenceMode)
   const [selectedPart, setSelectedPart] = useState<number | null>(null)
   const [cardIndex, setCardIndex] = useState(0)
   const [flipped, setFlipped] = useState(false)
@@ -109,7 +132,7 @@ function StudyApp({
   const [rootFilter, setRootFilter] = useState('all')
   const [query, setQuery] = useState('')
   const [shuffleOrder, setShuffleOrder] = useState<string[]>([])
-  const [memory, setMemory] = useState<MemoryStore>(loadMemory)
+  const [memory, setMemory] = useState<MemoryStore>(EMPTY_MEMORY)
   const [error, setError] = useState('')
   const [pronunciationStatus, setPronunciationStatus] = useState<PronunciationStatus>('idle')
   const [autoPlay, setAutoPlay] = useState(false)
@@ -268,18 +291,28 @@ function StudyApp({
   }, [])
 
   useEffect(() => {
-    fetch('/api/vocabulary')
+    if (!selectedDeck) return
+    const controller = new AbortController()
+    fetch(`/api/vocabulary?deck=${selectedDeck}`, { signal: controller.signal })
       .then((response) => {
         if (!response.ok) throw new Error(`HTTP ${response.status}`)
         return response.json() as Promise<VocabularyData>
       })
-      .then(setData)
-      .catch(() => setError('單字資料載入失敗，請重新整理頁面。'))
-  }, [])
+      .then((payload) => {
+        if (payload.meta.deckId !== selectedDeck) throw new Error('Unexpected vocabulary deck')
+        setData(payload)
+      })
+      .catch((fetchError) => {
+        if (fetchError instanceof DOMException && fetchError.name === 'AbortError') return
+        setError('單字資料載入失敗，請重新選擇單字書。')
+      })
+    return () => controller.abort()
+  }, [selectedDeck])
 
   useEffect(() => {
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(memory))
-  }, [memory])
+    if (!selectedDeck) return
+    window.localStorage.setItem(`${STORAGE_KEY_PREFIX}-${selectedDeck}`, JSON.stringify(memory))
+  }, [memory, selectedDeck])
 
   useEffect(() => {
     window.localStorage.setItem(AUTOPLAY_SECONDS_KEY, String(cardDuration))
@@ -311,10 +344,10 @@ function StudyApp({
         return matchesMode && matchesRoot && matchesQuery
       })
       .sort((a, b) => {
-        if (!shuffleOrder.length) return a.deckPosition - b.deckPosition
+        if (sequenceMode === 'fixed' || !shuffleOrder.length) return a.deckPosition - b.deckPosition
         return (orderMap.get(a.id) ?? 0) - (orderMap.get(b.id) ?? 0)
       })
-  }, [memory.recall, partWords, query, rootFilter, shuffleOrder, studyMode])
+  }, [memory.recall, partWords, query, rootFilter, sequenceMode, shuffleOrder, studyMode])
 
   const activeWord = filteredWords[cardIndex]
 
@@ -361,7 +394,7 @@ function StudyApp({
       const nextIndex = cardIndex + 1
       setCardIndex(nextIndex)
       setFlipped(false)
-      if (selectedPart !== null && studyMode === 'all' && rootFilter === 'all' && !query) {
+      if (sequenceMode === 'fixed' && selectedPart !== null && studyMode === 'all' && rootFilter === 'all' && !query) {
         setMemory((current) => ({
           ...current,
           positions: { ...current.positions, [String(selectedPart)]: nextIndex },
@@ -374,7 +407,7 @@ function StudyApp({
       window.clearTimeout(flipTimer)
       window.clearTimeout(nextTimer)
     }
-  }, [activeWord, autoPlay, cardDuration, cardIndex, filteredWords.length, query, rootFilter, selectedPart, studyMode])
+  }, [activeWord, autoPlay, cardDuration, cardIndex, filteredWords.length, query, rootFilter, selectedPart, sequenceMode, studyMode])
 
   const rootsForPart = useMemo(
     () => data?.rootGroups.filter((group) => group.part === selectedPart) ?? [],
@@ -384,6 +417,29 @@ function StudyApp({
   const knownCountForPart = (part: number) =>
     data?.words.filter((word) => word.part === part && memory.recall[word.id] === 'known').length ?? 0
 
+  const chooseDeck = (deckId: DeckId) => {
+    stopPronunciation()
+    setAutoPlay(false)
+    setData(null)
+    setError('')
+    setSelectedPart(null)
+    setShuffleOrder([])
+    setCardIndex(0)
+    setFlipped(false)
+    setMemory(loadMemory(deckId))
+    setSelectedDeck(deckId)
+  }
+
+  const applySequenceMode = (mode: SequenceMode) => {
+    unlockAudio()
+    setAutoPlay(false)
+    setSequenceMode(mode)
+    window.localStorage.setItem(SEQUENCE_MODE_KEY, mode)
+    setShuffleOrder(mode === 'random' ? shuffledWordIds(partWords) : [])
+    setCardIndex(0)
+    setFlipped(false)
+  }
+
   const openPart = (part: number) => {
     unlockAudio()
     setAutoPlay(false)
@@ -391,8 +447,9 @@ function StudyApp({
     setStudyMode('all')
     setRootFilter('all')
     setQuery('')
-    setShuffleOrder([])
-    setCardIndex(Math.max(0, memory.positions[String(part)] ?? 0))
+    const wordsForPart = data?.words.filter((word) => word.part === part) ?? []
+    setShuffleOrder(sequenceMode === 'random' ? shuffledWordIds(wordsForPart) : [])
+    setCardIndex(sequenceMode === 'fixed' ? Math.max(0, memory.positions[String(part)] ?? 0) : 0)
     setFlipped(false)
   }
 
@@ -402,7 +459,7 @@ function StudyApp({
     const next = Math.min(Math.max(cardIndex + direction, 0), filteredWords.length - 1)
     setCardIndex(next)
     setFlipped(false)
-    if (selectedPart !== null && studyMode === 'all' && rootFilter === 'all' && !query) {
+    if (sequenceMode === 'fixed' && selectedPart !== null && studyMode === 'all' && rootFilter === 'all' && !query) {
       setMemory((current) => ({
         ...current,
         positions: { ...current.positions, [String(selectedPart)]: next },
@@ -440,12 +497,9 @@ function StudyApp({
   const shuffleDeck = () => {
     unlockAudio()
     setAutoPlay(false)
-    const shuffled = [...partWords.map((word) => word.id)]
-    for (let index = shuffled.length - 1; index > 0; index -= 1) {
-      const target = Math.floor(Math.random() * (index + 1))
-      ;[shuffled[index], shuffled[target]] = [shuffled[target], shuffled[index]]
-    }
-    setShuffleOrder(shuffled)
+    setSequenceMode('random')
+    window.localStorage.setItem(SEQUENCE_MODE_KEY, 'random')
+    setShuffleOrder(shuffledWordIds(partWords))
     setCardIndex(0)
     setFlipped(false)
   }
@@ -454,6 +508,18 @@ function StudyApp({
     stopPronunciation()
     setAutoPlay(false)
     setSelectedPart(null)
+  }
+
+  const changeDeck = () => {
+    stopPronunciation()
+    setAutoPlay(false)
+    setData(null)
+    setSelectedDeck(null)
+    setSelectedPart(null)
+    setShuffleOrder([])
+    setCardIndex(0)
+    setFlipped(false)
+    setError('')
   }
 
   const toggleAutoPlay = () => {
@@ -485,7 +551,63 @@ function StudyApp({
     return () => window.removeEventListener('keydown', handleKey)
   })
 
-  if (error) return <main className="status-screen">{error}</main>
+  if (!selectedDeck) {
+    const deckOptions: Array<{ id: DeckId; title: string; count: number; description: string }> = [
+      { id: 'words1000', title: '1000 字', count: 1085, description: '份量精簡，五份各 217 張字卡' },
+      { id: 'words2000', title: '2000 字', count: 2078, description: '完整字庫，五份各約 415 張字卡' },
+    ]
+    return (
+      <main className="app-shell home-shell deck-picker-shell">
+        <header className="brand-bar">
+          <a className="brand" href="/" aria-label="GRE Roots 首頁">
+            <span className="brand-mark"><Sprout size={18} /></span>
+            GRE ROOTS
+          </a>
+          <div className="brand-actions">
+            {session.isAdmin && (
+              <button aria-label="帳號審核" className="account-review-button" onClick={onManageAccounts} type="button">
+                <ShieldCheck size={15} /><span>帳號審核</span>
+              </button>
+            )}
+            <a aria-label="登出" className="account-signout" href="/signout-with-chatgpt?return_to=/" target="_top">
+              <LogOut size={16} />
+            </a>
+          </div>
+        </header>
+
+        <section className="intro deck-intro">
+          <p className="eyebrow">CHOOSE A WORD BOOK</p>
+          <h1>今天要念<br />1000 字，還是 2000 字？</h1>
+          <p className="intro-copy">兩套單字書分開記錄進度；選好後，再決定要依字根固定排列或隨機出題。</p>
+        </section>
+
+        <section className="deck-choice-grid" aria-label="選擇單字書">
+          {deckOptions.map((option) => {
+            const deckMemory = loadMemory(option.id)
+            const known = Object.values(deckMemory.recall).filter((recall) => recall === 'known').length
+            return (
+              <button className="deck-choice-card" key={option.id} onClick={() => chooseDeck(option.id)} type="button">
+                <span className="deck-choice-label">WORD BOOK</span>
+                <strong>{option.title}</strong>
+                <span>{option.description}</span>
+                <small>已背 {known.toLocaleString()} · 剩 {(option.count - known).toLocaleString()}</small>
+                <ChevronRight aria-hidden="true" size={22} />
+              </button>
+            )
+          })}
+        </section>
+      </main>
+    )
+  }
+
+  if (error) {
+    return (
+      <main className="status-screen status-screen-column">
+        <span>{error}</span>
+        <Button onClick={changeDeck} variant="outline">重新選擇單字書</Button>
+      </main>
+    )
+  }
 
   if (!data) {
     return (
@@ -507,6 +629,7 @@ function StudyApp({
             GRE ROOTS
           </a>
           <div className="brand-actions">
+            <button className="change-deck-button" onClick={changeDeck} type="button">{data.meta.title}</button>
             <span className="word-total">已背 {totalKnown.toLocaleString()} · 剩 {totalRemaining.toLocaleString()}</span>
             {session.isAdmin && (
               <button aria-label="帳號審核" className="account-review-button" onClick={onManageAccounts} type="button">
@@ -520,11 +643,26 @@ function StudyApp({
         </header>
 
         <section className="intro">
-          <p className="eyebrow">GRE ROOTS</p>
+          <p className="eyebrow">{data.meta.title}</p>
           <h1>選一份，開始把字<br />連成有意義的家族。</h1>
           <p className="intro-copy">
-            五份各約 415 字；同字根不拆散，無字根字平均穿插。進入每張卡會自動播放美式發音。
+            全部 {data.meta.totalWords.toLocaleString()} 張字卡分成五份；同字根不拆散，無字根字平均穿插。進入每張卡會自動播放美式發音。
           </p>
+        </section>
+
+        <section className="sequence-picker" aria-labelledby="sequence-heading">
+          <div className="sequence-copy">
+            <p className="section-kicker">WORD ORDER</p>
+            <h2 id="sequence-heading">單字要怎麼出現？</h2>
+          </div>
+          <div className="sequence-options">
+            <button aria-pressed={sequenceMode === 'fixed'} className={sequenceMode === 'fixed' ? 'is-active' : ''} onClick={() => applySequenceMode('fixed')} type="button">
+              <span>固定順序</span><small>相同字根連續出現</small>
+            </button>
+            <button aria-pressed={sequenceMode === 'random'} className={sequenceMode === 'random' ? 'is-active' : ''} onClick={() => applySequenceMode('random')} type="button">
+              <span>隨機順序</span><small>每個單字重新打散</small>
+            </button>
+          </div>
         </section>
 
         <section className="part-section" aria-labelledby="part-heading">
@@ -579,12 +717,14 @@ function StudyApp({
           <ArrowLeft size={20} />
         </Button>
         <div className="study-title">
-          <span>PART {selectedPart}</span>
+          <span>{data.meta.title} · PART {selectedPart}</span>
           <strong>{filteredWords.length ? `${cardIndex + 1} / ${filteredWords.length}` : '沒有符合的字卡'}</strong>
         </div>
-        <Button aria-label="打亂目前這份" className="icon-button" onClick={shuffleDeck} size="icon" variant="ghost">
-          <Shuffle size={18} />
-        </Button>
+        {sequenceMode === 'random' ? (
+          <Button aria-label="重新打亂目前這份" className="icon-button" onClick={shuffleDeck} size="icon" variant="ghost">
+            <Shuffle size={18} />
+          </Button>
+        ) : <span className="header-icon-spacer" aria-hidden="true" />}
       </header>
 
       <div className="progress-track" aria-label="目前卡組進度">
@@ -614,6 +754,14 @@ function StudyApp({
       </section>
 
       <section className="study-toolbar" aria-label="篩選字卡">
+        <div className="study-sequence-tabs" aria-label="單字順序">
+          <button aria-pressed={sequenceMode === 'fixed'} className={sequenceMode === 'fixed' ? 'is-active' : ''} onClick={() => applySequenceMode('fixed')} type="button">
+            固定 · 同字根連續
+          </button>
+          <button aria-pressed={sequenceMode === 'random'} className={sequenceMode === 'random' ? 'is-active' : ''} onClick={() => applySequenceMode('random')} type="button">
+            隨機 · 全部打散
+          </button>
+        </div>
         <div className="mode-tabs">
           {([
             ['all', '全部'],

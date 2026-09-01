@@ -1,9 +1,13 @@
-import vocabularyData from '../data/vocabulary.json' with { type: 'json' }
+import vocabulary1000Data from '../data/vocabulary-1000.json' with { type: 'json' }
+import vocabulary2000Data from '../data/vocabulary.json' with { type: 'json' }
 
 export const ADMIN_EMAILS = ['wy.lee@ntub.edu.tw', 'kenneth.wy.lee21@gmail.com']
 export const ACCESS_STATUSES = ['pending', 'approved', 'rejected', 'revoked']
 
-const VOCABULARY_JSON = JSON.stringify(vocabularyData)
+const VOCABULARY_JSON_BY_DECK = {
+  words1000: JSON.stringify(vocabulary1000Data),
+  words2000: JSON.stringify(vocabulary2000Data),
+}
 let schemaReadyPromise = null
 
 export default {
@@ -15,8 +19,15 @@ export default {
         return json(await getSession(request, env))
       }
 
-      if (requestUrl.pathname === '/api/vocabulary' || requestUrl.pathname === '/data/vocabulary.json') {
-        return serveVocabulary(request, env)
+      if (
+        requestUrl.pathname === '/api/vocabulary' ||
+        requestUrl.pathname === '/data/vocabulary.json' ||
+        requestUrl.pathname === '/data/vocabulary-1000.json'
+      ) {
+        const requestedDeck = requestUrl.pathname === '/data/vocabulary-1000.json'
+          ? 'words1000'
+          : requestUrl.searchParams.get('deck') ?? 'words2000'
+        return serveVocabulary(request, env, requestedDeck)
       }
 
       if (requestUrl.pathname === '/api/pronunciation') {
@@ -137,10 +148,12 @@ async function requireAdmin(request, env) {
   return access
 }
 
-async function serveVocabulary(request, env) {
+async function serveVocabulary(request, env, deckId) {
   const access = await requireApproved(request, env)
   if (access.response) return access.response
-  return new Response(VOCABULARY_JSON, {
+  const payload = VOCABULARY_JSON_BY_DECK[deckId]
+  if (!payload) return json({ error: 'invalid_deck' }, 400)
+  return new Response(payload, {
     headers: {
       'content-type': 'application/json; charset=utf-8',
       'cache-control': 'private, max-age=3600',

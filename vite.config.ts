@@ -35,8 +35,11 @@ function localAccessApi() {
             response.end(JSON.stringify({ error: 'approval_required' }))
             return
           }
+          const deckFile = requestUrl.searchParams.get('deck') === 'words1000'
+            ? './data/vocabulary-1000.json'
+            : './data/vocabulary.json'
           response.setHeader('content-type', 'application/json; charset=utf-8')
-          response.end(await readFile(new URL('./data/vocabulary.json', import.meta.url)))
+          response.end(await readFile(new URL(deckFile, import.meta.url)))
           return
         }
 

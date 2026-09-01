@@ -113,6 +113,16 @@ const approvedVocabulary = await worker.fetch(signedRequest('/api/vocabulary', a
 if (approvedVocabulary.status !== 200) throw new Error(`Admin vocabulary failed: ${approvedVocabulary.status}`)
 if ((await approvedVocabulary.json()).meta.totalWords !== 2078) throw new Error('Approved vocabulary payload is invalid')
 
+const approvedVocabulary1000 = await worker.fetch(signedRequest('/api/vocabulary?deck=words1000', adminEmail), env)
+if (approvedVocabulary1000.status !== 200) throw new Error(`Admin 1000-word vocabulary failed: ${approvedVocabulary1000.status}`)
+const approvedVocabulary1000Payload = await approvedVocabulary1000.json()
+if (approvedVocabulary1000Payload.meta.totalWords !== 1085 || approvedVocabulary1000Payload.meta.deckId !== 'words1000') {
+  throw new Error('Approved 1000-word vocabulary payload is invalid')
+}
+
+const invalidDeck = await worker.fetch(signedRequest('/api/vocabulary?deck=unknown', adminEmail), env)
+if (invalidDeck.status !== 400) throw new Error(`Unknown deck was not rejected: ${invalidDeck.status}`)
+
 const approval = await worker.fetch(signedRequest(`/api/admin/accounts/${encodeURIComponent(pendingEmail)}`, adminEmail, {
   method: 'POST',
   headers: { 'content-type': 'application/json', origin: 'https://gre.example.test' },

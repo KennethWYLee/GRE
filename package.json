@@ -9,6 +9,8 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "data:export": "node scripts/export-vocabulary.mjs",
+    "data:export:1000": "node scripts/export-1000.mjs",
+    "data:export:all": "pnpm run data:export && pnpm run data:export:1000",
     "data:validate": "node scripts/validate-data.mjs",
     "access:validate": "node scripts/validate-access.mjs",
     "migration:validate": "node scripts/validate-migration.mjs",

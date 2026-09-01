@@ -49,12 +49,13 @@ function cleanLabel(value, label) {
 function cleanDetails(value) {
   return String(value ?? "")
     .replace(/\s+\.\s+[A-Za-z]+\s+2000\b/g, "")
+    .replace(/\s*\|\s*Mason\s+(?:1000|2000)\b/gi, "")
     .trim();
 }
 
 function parseDetails(rawDetails) {
   const details = String(rawDetails ?? "").trim();
-  const segments = details.split(/\s*\|\s*/);
+  const segments = details.split(/\s*\|\s*(?=\[(?:義|例|英)\]\s*)/);
   const pronunciation = String(segments[0] ?? "")
     .replace(/^\[/, "")
     .replace(/\]$/, "")
@@ -232,7 +233,8 @@ assert(
 
 const payload = {
   meta: {
-    title: "GRE Roots",
+    deckId: "words2000",
+    title: "2000 字",
     sourceWorkbook: "GRE Roots source workbook",
     totalWords: words.length,
     totalRootGroups: rootGroups.length,
