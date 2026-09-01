@@ -71,6 +71,10 @@ type MemoryStore = {
 const STORAGE_KEY = 'gre-roots-progress-v1'
 const AUTOPLAY_SECONDS_KEY = 'gre-roots-autoplay-seconds-v1'
 const AUTOPLAY_OPTIONS = [3, 5, 8, 10, 15, 20, 30] as const
+const PRONUNCIATION_LOOKAHEAD = 5
+const PRONUNCIATION_LOOKUP_WAIT_MS = 240
+const RECORDING_START_WAIT_MS = 360
+const RECORDING_LOOKUP_TIMEOUT = Symbol('recording-lookup-timeout')
 const SILENT_AUDIO =
   'data:audio/wav;base64,UklGRiYAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQIAAACAgA=='
 
@@ -115,6 +119,7 @@ function StudyApp({
   const audioUnlockedRef = useRef(false)
   const pronunciationRequestRef = useRef(0)
   const pronunciationCacheRef = useRef(new Map<string, Promise<string | null>>())
+  const pronunciationPreloadRef = useRef(new Map<string, HTMLAudioElement>())
 
   const unlockAudio = useCallback(() => {
     if (audioUnlockedRef.current) return
@@ -137,6 +142,29 @@ function StudyApp({
     pronunciationCacheRef.current.set(key, request)
     return request
   }, [])
+
+  const preloadRecording = useCallback((word: string) => {
+    const key = word.toLocaleLowerCase()
+    if (pronunciationPreloadRef.current.has(key)) return
+
+    void findRecording(word).then((recording) => {
+      if (!recording || pronunciationPreloadRef.current.has(key)) return
+
+      const audio = new Audio(recording)
+      audio.preload = 'auto'
+      audio.load()
+      pronunciationPreloadRef.current.set(key, audio)
+
+      while (pronunciationPreloadRef.current.size > PRONUNCIATION_LOOKAHEAD * 2) {
+        const oldestKey = pronunciationPreloadRef.current.keys().next().value
+        if (typeof oldestKey !== 'string') break
+        const oldestAudio = pronunciationPreloadRef.current.get(oldestKey)
+        oldestAudio?.pause()
+        oldestAudio?.removeAttribute('src')
+        pronunciationPreloadRef.current.delete(oldestKey)
+      }
+    })
+  }, [findRecording])
 
   const speakWithDevice = useCallback((word: string, requestId: number) => {
     if (!('speechSynthesis' in window)) {
@@ -176,24 +204,56 @@ function StudyApp({
     }
     window.speechSynthesis?.cancel()
 
-    const recording = await findRecording(word)
+    const recording = await Promise.race([
+      findRecording(word),
+      new Promise<typeof RECORDING_LOOKUP_TIMEOUT>((resolve) => {
+        window.setTimeout(() => resolve(RECORDING_LOOKUP_TIMEOUT), PRONUNCIATION_LOOKUP_WAIT_MS)
+      }),
+    ])
     if (requestId !== pronunciationRequestRef.current) return
 
+    if (recording === RECORDING_LOOKUP_TIMEOUT) {
+      speakWithDevice(word, requestId)
+      return
+    }
+
     if (recording) {
+      let startTimer: number | undefined
+      let fallbackUsed = false
       try {
-        const audio = audioRef.current ?? new Audio()
+        const key = word.toLocaleLowerCase()
+        const preloadedAudio = pronunciationPreloadRef.current.get(key)
+        const audio = preloadedAudio ?? audioRef.current ?? new Audio()
+        pronunciationPreloadRef.current.delete(key)
         audioRef.current = audio
-        audio.src = recording
+        if (audio.src !== recording) audio.src = recording
         audio.preload = 'auto'
         audio.playbackRate = 0.96
+        const fallbackToDevice = () => {
+          if (fallbackUsed || requestId !== pronunciationRequestRef.current) return
+          fallbackUsed = true
+          audio.pause()
+          speakWithDevice(word, requestId)
+        }
+        startTimer = window.setTimeout(fallbackToDevice, RECORDING_START_WAIT_MS)
         audio.onplay = () => {
+          window.clearTimeout(startTimer)
+          if (fallbackUsed) {
+            audio.pause()
+            return
+          }
           if (requestId === pronunciationRequestRef.current) setPronunciationStatus('recording')
         }
-        audio.onerror = () => speakWithDevice(word, requestId)
+        audio.onerror = () => {
+          window.clearTimeout(startTimer)
+          fallbackToDevice()
+        }
         await audio.play()
         return
       } catch {
-        // A missing recording or an autoplay restriction falls back to the device's US voice.
+        if (startTimer !== undefined) window.clearTimeout(startTimer)
+        if (!fallbackUsed) speakWithDevice(word, requestId)
+        return
       }
     }
 
@@ -273,6 +333,15 @@ function StudyApp({
     }, 80)
     return () => window.clearTimeout(timeout)
   }, [activeWord, playPronunciation])
+
+  useEffect(() => {
+    if (!activeWord) return
+    const upcomingWords = filteredWords.slice(
+      cardIndex + 1,
+      cardIndex + 1 + PRONUNCIATION_LOOKAHEAD,
+    )
+    for (const word of upcomingWords) preloadRecording(word.word)
+  }, [activeWord, cardIndex, filteredWords, preloadRecording])
 
   useEffect(() => stopPronunciation, [stopPronunciation])
 

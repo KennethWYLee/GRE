@@ -264,10 +264,22 @@ async function getPronunciation(requestUrl) {
     return json({ audio: null, accent: null, source: null }, 400)
   }
 
+  const edgeCache = globalThis.caches?.default
+  const cacheKey = new Request(requestUrl.toString(), {
+    headers: { accept: 'application/json' },
+  })
+  let cached = null
+  try {
+    cached = await edgeCache?.match(cacheKey)
+  } catch {
+    // Continue with the live lookup if the optional edge cache is unavailable.
+  }
+  if (cached) return browserCachedPronunciation(cached)
+
   try {
     const directUsRecording = await findGoogleDictionaryUsRecording(word)
     if (directUsRecording) {
-      return json({
+      return cachePronunciation(edgeCache, cacheKey, {
         audio: directUsRecording,
         accent: 'en-US',
         phonetic: null,
@@ -282,7 +294,9 @@ async function getPronunciation(requestUrl) {
         signal: AbortSignal.timeout(2200),
       },
     )
-    if (!response.ok) return json({ audio: null, accent: null, source: null })
+    if (!response.ok) {
+      return cachePronunciation(edgeCache, cacheKey, { audio: null, accent: null, source: null }, 86400)
+    }
 
     const entries = await response.json()
     const candidates = entries
@@ -296,17 +310,52 @@ async function getPronunciation(requestUrl) {
       .sort((a, b) => audioScore(b.audio) - audioScore(a.audio))
 
     const selected = candidates[0]
-    if (!selected) return json({ audio: null, accent: null, source: null })
+    if (!selected) {
+      return cachePronunciation(edgeCache, cacheKey, { audio: null, accent: null, source: null }, 86400)
+    }
 
-    return json({
+    return cachePronunciation(edgeCache, cacheKey, {
       audio: selected.audio,
       accent: isUsAudio(selected.audio) ? 'en-US' : 'en',
       phonetic: selected.text,
       source: 'dictionaryapi.dev',
     })
   } catch {
-    return json({ audio: null, accent: null, source: null })
+    return cachePronunciation(edgeCache, cacheKey, { audio: null, accent: null, source: null }, 3600)
   }
+}
+
+async function cachePronunciation(edgeCache, cacheKey, payload, maxAge = 2592000) {
+  const edgeResponse = new Response(JSON.stringify(payload), {
+    status: 200,
+    headers: {
+      'content-type': 'application/json; charset=utf-8',
+      'cache-control': `public, max-age=${maxAge}`,
+      'x-content-type-options': 'nosniff',
+    },
+  })
+  if (edgeCache) {
+    try {
+      await edgeCache.put(cacheKey, edgeResponse.clone())
+    } catch {
+      // Pronunciation still works when the optional edge cache is unavailable.
+    }
+  }
+  return browserCachedPronunciation(edgeResponse, maxAge)
+}
+
+function browserCachedPronunciation(response, maxAge) {
+  const headers = new Headers(response.headers)
+  const existingCacheControl = headers.get('cache-control')
+  headers.set(
+    'cache-control',
+    existingCacheControl?.replace(/^public/i, 'private') ?? `private, max-age=${maxAge ?? 2592000}`,
+  )
+  return new Response(response.body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers,
+  })
 }
 
 async function findGoogleDictionaryUsRecording(word) {

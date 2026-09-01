@@ -52,8 +52,11 @@ try {
     throw new Error(`US recording was not preferred: ${payload.audio}`)
   }
   if (payload.accent !== 'en-US') throw new Error(`Unexpected accent: ${payload.accent}`)
+  if (!response.headers.get('cache-control')?.startsWith('private, max-age=')) {
+    throw new Error(`Pronunciation response is not browser-cacheable: ${response.headers.get('cache-control')}`)
+  }
 
-  console.log(JSON.stringify({ valid: true, selected: 'US recording' }, null, 2))
+  console.log(JSON.stringify({ valid: true, selected: 'US recording', browserCache: true }, null, 2))
 } finally {
   globalThis.fetch = originalFetch
 }
