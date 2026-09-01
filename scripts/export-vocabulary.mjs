@@ -4,15 +4,27 @@ import { fileURLToPath } from "node:url";
 import XLSX from "xlsx";
 
 const projectDir = fileURLToPath(new URL("..", import.meta.url));
-const workbookPath =
-  process.env.GRE_SOURCE_XLSX ??
-  path.resolve(
-    projectDir,
-    "..",
-    "outputs",
-    "kuo_vocab_20260831",
-    "Mason_2000_2025_5Parts_Root_Complete.xlsx",
+const sourceDirectory = path.resolve(
+  projectDir,
+  "..",
+  "outputs",
+  "kuo_vocab_20260831",
+);
+
+async function resolveWorkbookPath() {
+  if (process.env.GRE_SOURCE_XLSX) return process.env.GRE_SOURCE_XLSX;
+
+  const workbookNames = (await fs.readdir(sourceDirectory)).filter((name) =>
+    name.toLowerCase().endsWith(".xlsx"),
   );
+  assert(
+    workbookNames.length === 1,
+    `Expected one .xlsx workbook in ${sourceDirectory}; found ${workbookNames.length}`,
+  );
+  return path.resolve(sourceDirectory, workbookNames[0]);
+}
+
+const workbookPath = await resolveWorkbookPath();
 const outputPath = path.resolve(projectDir, "data", "vocabulary.json");
 
 const expectedHeaders = [
@@ -31,6 +43,12 @@ function assert(condition, message) {
 function cleanLabel(value, label) {
   return String(value ?? "")
     .replace(new RegExp(`^\\[${label}\\]\\s*`), "")
+    .trim();
+}
+
+function cleanDetails(value) {
+  return String(value ?? "")
+    .replace(/\s+\.\s+[A-Za-z]+\s+2000\b/g, "")
     .trim();
 }
 
@@ -72,7 +90,7 @@ const sourceRows = values.slice(1).map((row, index) => ({
   root: String(row[2] ?? "").trim(),
   frequency: String(row[3] ?? "").trim(),
   word: String(row[4] ?? "").trim(),
-  details: String(row[5] ?? "").trim(),
+  details: cleanDetails(row[5]),
   sourceIndex: index,
 }));
 
@@ -214,8 +232,8 @@ assert(
 
 const payload = {
   meta: {
-    title: "Mason GRE 2000 Root Deck",
-    sourceWorkbook: "Mason_2000_2025_5Parts_Root_Complete.xlsx",
+    title: "GRE Roots",
+    sourceWorkbook: "GRE Roots source workbook",
     totalWords: words.length,
     totalRootGroups: rootGroups.length,
     totalSWords: sRows.length,

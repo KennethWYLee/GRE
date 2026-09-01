@@ -451,7 +451,7 @@ function StudyApp({
         </header>
 
         <section className="intro">
-          <p className="eyebrow">MASON 2000 · ROOT DECK</p>
+          <p className="eyebrow">GRE ROOTS</p>
           <h1>選一份，開始把字<br />連成有意義的家族。</h1>
           <p className="intro-copy">
             五份各約 415 字；同字根不拆散，無字根字平均穿插。進入每張卡會自動播放美式發音。
