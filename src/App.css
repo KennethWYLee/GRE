@@ -11,6 +11,8 @@
 .account-signout { width: 34px; }
 .account-review-button:hover, .account-review-button:focus-visible, .account-signout:hover, .account-signout:focus-visible, .change-deck-button:hover, .change-deck-button:focus-visible { background: var(--ink); color: var(--card); outline: none; }
 .word-total, .section-heading > p { color: var(--muted); font-size: .76rem; }
+.sync-indicator { display: inline-flex; min-height: 28px; align-items: center; gap: 5px; color: var(--green); font-size: .62rem; font-weight: 750; }
+.sync-indicator.sync-offline { color: #9f4635; }
 .intro { max-width: 760px; padding: 66px 0 72px; }
 .eyebrow, .section-kicker { margin: 0 0 18px; color: var(--green); font-size: .7rem; font-weight: 800; letter-spacing: .17em; }
 .intro h1 { max-width: 720px; margin: 0; color: var(--ink); font-family: var(--display); font-size: clamp(2.65rem, 7.6vw, 5.7rem); font-weight: 500; letter-spacing: -.055em; line-height: .98; }
@@ -35,6 +37,31 @@
 .sequence-options button small { color: var(--muted); font-size: .62rem; }
 .sequence-options button.is-active { background: var(--ink); color: var(--paper); }
 .sequence-options button.is-active small { color: color-mix(in srgb, var(--paper) 72%, transparent); }
+.learning-dashboard { display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(280px, .65fr); margin-bottom: 28px; border: 1px solid var(--ink); background: var(--card); }
+.daily-review-card { position: relative; display: grid; min-height: 126px; grid-template-columns: auto minmax(0, 1fr) auto; gap: 16px; align-items: center; padding: 22px; border: 0; border-right: 1px solid var(--line-dark); background: transparent; color: var(--ink); cursor: pointer; text-align: left; }
+.daily-review-card:hover:not(:disabled), .daily-review-card:focus-visible:not(:disabled) { background: var(--green); color: var(--paper); outline: none; }
+.daily-review-card:disabled { cursor: default; opacity: .72; }
+.dashboard-icon { display: grid; width: 44px; height: 44px; place-items: center; border: 1px solid currentColor; border-radius: 50%; color: var(--green); }
+.daily-review-card:hover .dashboard-icon { color: var(--paper); }
+.daily-review-card > span:nth-child(2) { display: grid; gap: 4px; }
+.daily-review-card small { color: var(--green); font-size: .58rem; font-weight: 850; letter-spacing: .14em; }
+.daily-review-card strong { font-family: var(--display); font-size: clamp(1.35rem, 3.4vw, 2rem); font-weight: 600; }
+.daily-review-card em { color: var(--muted); font-size: .67rem; font-style: normal; line-height: 1.5; }
+.daily-review-card:hover small, .daily-review-card:hover em { color: var(--paper); }
+.stat-grid { display: grid; grid-template-columns: repeat(3, 1fr); }
+.stat-grid > div, .stat-grid > button { display: grid; min-width: 0; place-items: center; align-content: center; padding: 13px 5px; border: 0; border-right: 1px solid var(--line); background: transparent; color: var(--ink); text-align: center; }
+.stat-grid > button { cursor: pointer; }
+.stat-grid > button:hover:not(:disabled), .stat-grid > button:focus-visible:not(:disabled) { background: var(--green); color: var(--paper); outline: none; }
+.stat-grid > button:disabled { cursor: default; }
+.stat-grid > :last-child { border-right: 0; }
+.stat-grid svg { color: var(--green); }
+.stat-grid span { margin-top: 5px; color: var(--muted); font-size: .58rem; }
+.stat-grid strong { margin-top: 3px; font-family: var(--display); font-size: 1.55rem; font-weight: 600; }
+.stat-grid small { color: var(--muted); font-size: .55rem; }
+.stat-grid > button:hover svg, .stat-grid > button:hover span, .stat-grid > button:hover small { color: var(--paper); }
+.weak-roots { display: flex; grid-column: 1 / -1; min-height: 42px; align-items: center; gap: 10px; overflow-x: auto; padding: 8px 12px; border-top: 1px solid var(--line); }
+.weak-roots > span { flex: 0 0 auto; color: var(--muted); font-size: .61rem; font-weight: 800; }
+.weak-roots small { flex: 0 0 auto; padding: 4px 7px; border: 1px solid var(--line-dark); color: var(--ink-soft); font-size: .58rem; }
 .part-section { border-top: 1px solid var(--ink); }
 .section-heading { display: flex; align-items: end; justify-content: space-between; gap: 20px; padding: 24px 0 20px; }
 .section-kicker { margin-bottom: 7px; }
@@ -78,11 +105,15 @@
 .memory-progress-table td strong { font-family: var(--display); font-size: 1.2rem; font-weight: 650; }
 .memory-progress-table td span { color: var(--muted); font-size: .63rem; }
 .study-toolbar { padding: 14px 0 0; }
+.practice-tabs { display: grid; grid-template-columns: repeat(4, 1fr); margin-bottom: 10px; border: 1px solid var(--ink); }
+.practice-tabs button { display: flex; min-height: 42px; align-items: center; justify-content: center; gap: 6px; border: 0; border-right: 1px solid var(--line-dark); background: transparent; color: var(--muted); cursor: pointer; font-size: .7rem; font-weight: 800; }
+.practice-tabs button:last-child { border-right: 0; }
+.practice-tabs button.is-active { background: var(--ink); color: var(--paper); }
 .study-sequence-tabs { display: grid; grid-template-columns: repeat(2, 1fr); margin-bottom: 10px; border: 1px solid var(--line-dark); }
 .study-sequence-tabs button { min-height: 38px; border: 0; border-right: 1px solid var(--line-dark); background: var(--card); color: var(--muted); cursor: pointer; font-size: .7rem; font-weight: 750; }
 .study-sequence-tabs button:last-child { border-right: 0; }
 .study-sequence-tabs button.is-active { background: var(--green); color: var(--paper); }
-.mode-tabs { display: grid; grid-template-columns: repeat(3, 1fr); border: 1px solid var(--line-dark); }
+.mode-tabs { display: grid; grid-template-columns: repeat(4, 1fr); border: 1px solid var(--line-dark); }
 .mode-tabs button { min-height: 38px; border: 0; border-right: 1px solid var(--line-dark); background: transparent; color: var(--muted); cursor: pointer; font-size: .75rem; font-weight: 700; }
 .mode-tabs button:last-child { border-right: 0; }
 .mode-tabs button.is-active { background: var(--ink); color: var(--paper); }
@@ -109,6 +140,9 @@
 .card-front, .card-back { min-height: inherit; padding: clamp(26px, 7vw, 52px); }
 .card-front { display: flex; flex-direction: column; }
 .card-topline { display: flex; justify-content: space-between; color: var(--green); font-size: .65rem; font-weight: 800; letter-spacing: .14em; }
+.card-top-actions { display: inline-flex; align-items: center; gap: 9px; }
+.favorite-button { display: grid; width: 30px; height: 30px; place-items: center; border: 0; background: transparent; color: var(--muted); cursor: pointer; }
+.favorite-button:hover, .favorite-button:focus-visible, .favorite-button.is-favorite { color: #aa7d26; outline: none; }
 .word-block { margin: auto 0; text-align: center; }
 .word-block h2 { margin: 0; overflow-wrap: anywhere; font-family: var(--display); font-size: clamp(3rem, 11vw, 6.2rem); font-weight: 500; letter-spacing: -.05em; line-height: .95; }
 .word-block p { margin: 18px 0 0; color: var(--muted); font-family: var(--display); font-size: 1.05rem; }
@@ -146,6 +180,26 @@
 .empty-state > svg { color: var(--green); }
 .empty-state h2 { margin: 16px 0 0; color: var(--ink); font-family: var(--display); font-size: 1.7rem; }
 .empty-state p { margin: 8px 0 22px; font-size: .8rem; }
+.completion-actions { display: flex; gap: 10px; }
+.quiz-stage { justify-content: flex-start; }
+.quiz-card { min-height: min(530px, 64svh); padding: clamp(24px, 6vw, 42px); border: 1px solid var(--ink); background: var(--card); box-shadow: 8px 8px 0 var(--line-dark); }
+.quiz-card.is-correct { border-color: var(--green); }
+.quiz-card.is-wrong { border-color: #9f4635; }
+.quiz-topline { display: flex; align-items: center; justify-content: space-between; color: var(--green); font-size: .63rem; font-weight: 850; letter-spacing: .1em; }
+.quiz-prompt { display: grid; min-height: 180px; place-items: center; align-content: center; text-align: center; }
+.quiz-prompt h2 { margin: 0; overflow-wrap: anywhere; font-family: var(--display); font-size: clamp(2.8rem, 10vw, 5rem); font-weight: 500; letter-spacing: -.045em; }
+.quiz-prompt > p { margin: 12px 0 0; color: var(--muted); font-family: var(--display); font-size: 1.05rem; }
+.spelling-prompt > p { max-width: 560px; margin: 0; color: var(--ink); font-family: var(--display); font-size: clamp(1.4rem, 5vw, 2.2rem); line-height: 1.25; }
+.quiz-options { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.quiz-options button { min-height: 68px; overflow-wrap: anywhere; padding: 10px 12px; border: 1px solid var(--line-dark); background: transparent; color: var(--ink); cursor: pointer; font-size: .75rem; font-weight: 700; line-height: 1.4; text-align: left; }
+.quiz-options button:hover:not(:disabled), .quiz-options button:focus-visible:not(:disabled) { border-color: var(--green); background: color-mix(in srgb, var(--green) 8%, var(--card)); outline: none; }
+.quiz-options button.is-answer { border-color: var(--green); background: var(--green); color: var(--paper); }
+.quiz-options button.is-muted { opacity: .4; }
+.spelling-form { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; }
+.spelling-form input { min-height: 48px; min-width: 0; border: 1px solid var(--ink); border-radius: 0; outline: 0; background: transparent; color: var(--ink); font-family: var(--display); font-size: 1.15rem; padding: 0 14px; }
+.spelling-form input:focus { border-color: var(--green); box-shadow: inset 0 0 0 1px var(--green); }
+.quiz-feedback { min-height: 22px; margin: 16px 0 0; color: var(--green); font-size: .75rem; font-weight: 800; text-align: center; }
+.quiz-card.is-wrong .quiz-feedback { color: #9f4635; }
 .status-screen { display: flex; min-height: 100svh; align-items: center; justify-content: center; gap: 10px; color: var(--muted); font-size: .9rem; }
 .status-screen-column { flex-direction: column; }
 .loading-mark { color: var(--green); animation: breathe 1.6s ease-in-out infinite; }
@@ -205,7 +259,7 @@
 .admin-footer { display: flex; align-items: center; justify-content: center; gap: 6px; padding-top: 18px; color: var(--muted); font-size: .63rem; }
 
 @media (max-width: 760px) {
-  .intro { padding: 48px 0 52px; }
+  .intro { padding: 42px 0 44px; }
   .intro h1 br { display: none; }
   .section-heading > p { display: none; }
   .deck-choice-grid { grid-template-columns: 1fr; }
@@ -213,6 +267,8 @@
   .deck-choice-card:last-child { border-bottom: 0; }
   .deck-choice-card > svg { top: 22px; right: 18px; }
   .sequence-picker { grid-template-columns: 1fr; gap: 16px; }
+  .learning-dashboard { grid-template-columns: 1fr; }
+  .daily-review-card { min-height: 112px; border-right: 0; border-bottom: 1px solid var(--line-dark); }
   .part-grid { grid-template-columns: 1fr; }
   .part-card { min-height: 86px; flex-direction: row; align-items: center; gap: 18px; border-right: 0; border-bottom: 1px solid var(--line); padding: 16px 12px; }
   .part-card:last-child { border-bottom: 0; }
@@ -225,6 +281,7 @@
   .part-arrow { right: 10px; top: 50%; transform: translateY(-50%); }
   .account-review-button span { display: none; }
   .account-review-button { width: 34px; padding: 0; }
+  .sync-indicator > span { display: none; }
   .flashcard { min-height: min(520px, 66svh); box-shadow: 5px 5px 0 var(--line-dark); }
   .card-back { max-height: min(520px, 66svh); }
 }
@@ -235,6 +292,12 @@
   .brand-actions { gap: 6px; }
   .change-deck-button { padding: 0 7px; }
   .sequence-options button { padding-inline: 10px; }
+  .daily-review-card { gap: 11px; padding: 17px 14px; }
+  .dashboard-icon { width: 38px; height: 38px; }
+  .stat-grid span { font-size: .54rem; }
+  .practice-tabs button { gap: 4px; font-size: .64rem; }
+  .practice-tabs button svg { width: 14px; }
+  .mode-tabs button { font-size: .68rem; }
   .part-meta { font-size: .67rem; }
   .study-stage { padding-top: 14px; }
   .card-front, .card-back { padding: 26px 22px; }
@@ -248,6 +311,10 @@
   .recall-actions button { min-height: 56px; gap: 5px; padding: 0 5px; }
   .recall-actions span { font-size: .7rem; }
   .recall-actions small { display: none; }
+  .quiz-card { min-height: min(500px, 63svh); padding: 22px 18px; box-shadow: 5px 5px 0 var(--line-dark); }
+  .quiz-options { grid-template-columns: 1fr; gap: 8px; }
+  .quiz-options button { min-height: 54px; }
+  .spelling-form { grid-template-columns: 1fr; }
   .access-card { box-shadow: 5px 5px 0 var(--line-dark); }
   .admin-shell { padding-inline: 14px; }
   .admin-summary > div { padding: 13px 5px; }

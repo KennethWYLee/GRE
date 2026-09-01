@@ -30,6 +30,12 @@ export default {
         return serveVocabulary(request, env, requestedDeck)
       }
 
+      if (requestUrl.pathname === '/api/progress') {
+        if (request.method === 'GET') return getStudyProgress(request, env, requestUrl)
+        if (request.method === 'PUT') return saveStudyProgress(request, env, requestUrl)
+        return json({ error: 'method_not_allowed' }, 405)
+      }
+
       if (requestUrl.pathname === '/api/pronunciation') {
         const access = await requireApproved(request, env)
         if (access.response) return access.response
@@ -162,6 +168,71 @@ async function serveVocabulary(request, env, deckId) {
   })
 }
 
+async function getStudyProgress(request, env, requestUrl) {
+  const access = await requireApproved(request, env)
+  if (access.response) return access.response
+  const deckId = requestUrl.searchParams.get('deck')
+  if (!VOCABULARY_JSON_BY_DECK[deckId]) return json({ error: 'invalid_deck' }, 400)
+
+  const row = await env.DB.prepare(
+    `SELECT progress_json, client_updated_at, updated_at
+     FROM study_progress WHERE email = ? AND deck_id = ?`,
+  ).bind(access.session.email, deckId).first()
+
+  if (!row) return json({ progress: null, clientUpdatedAt: 0, updatedAt: null })
+  let progress = null
+  try {
+    progress = JSON.parse(row.progress_json)
+  } catch {
+    return json({ error: 'invalid_stored_progress' }, 500)
+  }
+  return json({ progress, clientUpdatedAt: row.client_updated_at, updatedAt: row.updated_at })
+}
+
+async function saveStudyProgress(request, env, requestUrl) {
+  const access = await requireApproved(request, env)
+  if (access.response) return access.response
+  if (!isTrustedOrigin(request)) return json({ error: 'invalid_origin' }, 403)
+  if (!(request.headers.get('content-type') ?? '').toLocaleLowerCase().includes('application/json')) {
+    return json({ error: 'json_required' }, 415)
+  }
+
+  const deckId = requestUrl.searchParams.get('deck')
+  if (!VOCABULARY_JSON_BY_DECK[deckId]) return json({ error: 'invalid_deck' }, 400)
+  const payload = await request.json().catch(() => null)
+  const progress = payload?.progress
+  if (!isProgressPayload(progress)) return json({ error: 'invalid_progress' }, 400)
+
+  const progressJson = JSON.stringify(progress)
+  if (progressJson.length > 1_000_000) return json({ error: 'progress_too_large' }, 413)
+  const clientUpdatedAt = Number(progress.updatedAt)
+  await env.DB.prepare(
+    `INSERT INTO study_progress (email, deck_id, progress_json, client_updated_at, updated_at)
+     VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
+     ON CONFLICT(email, deck_id) DO UPDATE SET
+       progress_json = excluded.progress_json,
+       client_updated_at = excluded.client_updated_at,
+       updated_at = CURRENT_TIMESTAMP
+     WHERE excluded.client_updated_at >= study_progress.client_updated_at`,
+  ).bind(access.session.email, deckId, progressJson, clientUpdatedAt).run()
+
+  const row = await env.DB.prepare(
+    `SELECT client_updated_at, updated_at FROM study_progress WHERE email = ? AND deck_id = ?`,
+  ).bind(access.session.email, deckId).first()
+  return json({ ok: true, clientUpdatedAt: row?.client_updated_at ?? clientUpdatedAt, updatedAt: row?.updated_at ?? null })
+}
+
+function isProgressPayload(progress) {
+  if (!progress || typeof progress !== 'object' || Array.isArray(progress)) return false
+  const updatedAt = Number(progress.updatedAt)
+  if (!Number.isFinite(updatedAt) || updatedAt < 0) return false
+  for (const key of ['recall', 'positions', 'schedule', 'favorites', 'activity']) {
+    const value = progress[key]
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return false
+  }
+  return true
+}
+
 async function listAccounts(request, env) {
   const access = await requireAdmin(request, env)
   if (access.response) return access.response
@@ -254,6 +325,16 @@ async function initializeAccountSchema(db) {
     db.prepare(
       `CREATE INDEX IF NOT EXISTS idx_account_access_status_requested
        ON account_access(status, requested_at)`,
+    ),
+    db.prepare(
+      `CREATE TABLE IF NOT EXISTS study_progress (
+        email TEXT NOT NULL COLLATE NOCASE,
+        deck_id TEXT NOT NULL CHECK (deck_id IN ('words1000', 'words2000')),
+        progress_json TEXT NOT NULL,
+        client_updated_at INTEGER NOT NULL DEFAULT 0,
+        updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (email, deck_id)
+      )`,
     ),
     ...ADMIN_EMAILS.map((email) =>
       db.prepare(

@@ -1,10 +1,17 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   ArrowLeft,
+  BarChart3,
+  Brain,
   Check,
   ChevronLeft,
   ChevronRight,
   CircleHelp,
+  Cloud,
+  CloudOff,
+  Flame,
+  Keyboard,
+  Languages,
   LoaderCircle,
   LogOut,
   Pause,
@@ -14,19 +21,39 @@ import {
   Shuffle,
   ShieldCheck,
   Sprout,
+  Star,
   Timer,
   Volume2,
   X,
 } from 'lucide-react'
 import { Button } from './components/ui/button'
 import { AccountAccess, type ApprovedSession } from './AccountAccess'
+import {
+  advanceQuiz,
+  buildQuizOptions,
+  calculateStreak,
+  dueWordIds,
+  emptyMemory,
+  loadMemory,
+  localDateKey,
+  mergeMemory,
+  normalizeSpelling,
+  quizValue,
+  recordReview,
+  saveMemory,
+  toggleFavorite,
+  type DeckId,
+  type MemoryStore,
+  type QuizKind,
+  type RecallState,
+} from './study-memory'
 import './App.css'
 
-type RecallState = 'again' | 'hard' | 'known'
-type StudyMode = 'all' | 'review' | 'known'
+type StudyMode = 'all' | 'review' | 'known' | 'favorites'
 type PronunciationStatus = 'idle' | 'loading' | 'recording' | 'device' | 'unavailable'
-type DeckId = 'words1000' | 'words2000'
 type SequenceMode = 'fixed' | 'random'
+type CardMode = 'flashcard' | 'quiz'
+type SyncStatus = 'idle' | 'loading' | 'synced' | 'offline'
 
 type PartSummary = {
   id: number
@@ -65,13 +92,6 @@ type VocabularyData = {
   words: VocabularyWord[]
 }
 
-type MemoryStore = {
-  recall: Record<string, RecallState>
-  positions: Record<string, number>
-}
-
-const LEGACY_STORAGE_KEY = 'gre-roots-progress-v1'
-const STORAGE_KEY_PREFIX = 'gre-roots-progress-v2'
 const SEQUENCE_MODE_KEY = 'gre-roots-sequence-mode-v1'
 const AUTOPLAY_SECONDS_KEY = 'gre-roots-autoplay-seconds-v1'
 const AUTOPLAY_OPTIONS = [3, 5, 8, 10, 15, 20, 30] as const
@@ -81,21 +101,6 @@ const RECORDING_START_WAIT_MS = 360
 const RECORDING_LOOKUP_TIMEOUT = Symbol('recording-lookup-timeout')
 const SILENT_AUDIO =
   'data:audio/wav;base64,UklGRiYAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQIAAACAgA=='
-
-const EMPTY_MEMORY: MemoryStore = { recall: {}, positions: {} }
-
-function loadMemory(deckId: DeckId): MemoryStore {
-  try {
-    const storageKey = `${STORAGE_KEY_PREFIX}-${deckId}`
-    const saved = window.localStorage.getItem(storageKey) ??
-      (deckId === 'words2000' ? window.localStorage.getItem(LEGACY_STORAGE_KEY) : null)
-    if (!saved) return { recall: {}, positions: {} }
-    const parsed = JSON.parse(saved) as Partial<MemoryStore>
-    return { recall: parsed.recall ?? {}, positions: parsed.positions ?? {} }
-  } catch {
-    return { recall: {}, positions: {} }
-  }
-}
 
 function loadSequenceMode(): SequenceMode {
   return window.localStorage.getItem(SEQUENCE_MODE_KEY) === 'random' ? 'random' : 'fixed'
@@ -126,13 +131,26 @@ function StudyApp({
   const [selectedDeck, setSelectedDeck] = useState<DeckId | null>(null)
   const [sequenceMode, setSequenceMode] = useState<SequenceMode>(loadSequenceMode)
   const [selectedPart, setSelectedPart] = useState<number | null>(null)
+  const [dailyReview, setDailyReview] = useState(false)
+  const [dailyReviewIds, setDailyReviewIds] = useState<string[]>([])
+  const [favoriteReview, setFavoriteReview] = useState(false)
   const [cardIndex, setCardIndex] = useState(0)
   const [flipped, setFlipped] = useState(false)
   const [studyMode, setStudyMode] = useState<StudyMode>('all')
   const [rootFilter, setRootFilter] = useState('all')
   const [query, setQuery] = useState('')
   const [shuffleOrder, setShuffleOrder] = useState<string[]>([])
-  const [memory, setMemory] = useState<MemoryStore>(EMPTY_MEMORY)
+  const [memory, setMemory] = useState<MemoryStore>(emptyMemory)
+  const [syncReady, setSyncReady] = useState(false)
+  const [syncStatus, setSyncStatus] = useState<SyncStatus>('idle')
+  const [cardMode, setCardMode] = useState<CardMode>('flashcard')
+  const [quizKind, setQuizKind] = useState<QuizKind>('meaning')
+  const [quizQueue, setQuizQueue] = useState<string[]>([])
+  const [quizAnswer, setQuizAnswer] = useState('')
+  const [quizFeedback, setQuizFeedback] = useState<{ correct: boolean; correctValue: string } | null>(null)
+  const [quizComplete, setQuizComplete] = useState(false)
+  const [sessionReviewedIds, setSessionReviewedIds] = useState<string[]>([])
+  const [roundComplete, setRoundComplete] = useState(false)
   const [error, setError] = useState('')
   const [pronunciationStatus, setPronunciationStatus] = useState<PronunciationStatus>('idle')
   const [autoPlay, setAutoPlay] = useState(false)
@@ -311,17 +329,60 @@ function StudyApp({
 
   useEffect(() => {
     if (!selectedDeck) return
-    window.localStorage.setItem(`${STORAGE_KEY_PREFIX}-${selectedDeck}`, JSON.stringify(memory))
-  }, [memory, selectedDeck])
+    const controller = new AbortController()
+    fetch(`/api/progress?deck=${selectedDeck}`, { signal: controller.signal })
+      .then((response) => {
+        if (!response.ok) throw new Error(`HTTP ${response.status}`)
+        return response.json() as Promise<{ progress: unknown }>
+      })
+      .then((payload) => {
+        const merged = mergeMemory(loadMemory(selectedDeck), payload.progress)
+        saveMemory(selectedDeck, merged)
+        setMemory(merged)
+        setSyncReady(true)
+        setSyncStatus('synced')
+      })
+      .catch((syncError) => {
+        if (syncError instanceof DOMException && syncError.name === 'AbortError') return
+        setSyncReady(true)
+        setSyncStatus('offline')
+      })
+    return () => controller.abort()
+  }, [selectedDeck])
+
+  useEffect(() => {
+    if (!selectedDeck) return
+    saveMemory(selectedDeck, memory)
+    if (!syncReady) return
+    const timeout = window.setTimeout(() => {
+      fetch(`/api/progress?deck=${selectedDeck}`, {
+        method: 'PUT',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ progress: memory }),
+      })
+        .then((response) => {
+          if (!response.ok) throw new Error(`HTTP ${response.status}`)
+          setSyncStatus('synced')
+        })
+        .catch(() => setSyncStatus('offline'))
+    }, 650)
+    return () => window.clearTimeout(timeout)
+  }, [memory, selectedDeck, syncReady])
 
   useEffect(() => {
     window.localStorage.setItem(AUTOPLAY_SECONDS_KEY, String(cardDuration))
   }, [cardDuration])
 
-  const partWords = useMemo(
-    () => data?.words.filter((word) => word.part === selectedPart) ?? [],
-    [data, selectedPart],
-  )
+  const dueIds = useMemo(() => dueWordIds(memory), [memory])
+  const partWords = useMemo(() => {
+    if (!data) return []
+    if (dailyReview) {
+      const reviewSet = new Set(dailyReviewIds)
+      return data.words.filter((word) => reviewSet.has(word.id))
+    }
+    if (favoriteReview) return data.words.filter((word) => memory.favorites[word.id])
+    return data.words.filter((word) => word.part === selectedPart)
+  }, [dailyReview, dailyReviewIds, data, favoriteReview, memory.favorites, selectedPart])
 
   const filteredWords = useMemo(() => {
     const normalizedQuery = query.trim().toLocaleLowerCase()
@@ -331,8 +392,9 @@ function StudyApp({
         const recall = memory.recall[word.id]
         const matchesMode =
           studyMode === 'all' ||
-          (studyMode === 'review' && recall !== 'known') ||
-          (studyMode === 'known' && recall === 'known')
+          (studyMode === 'review' && dueIds.has(word.id)) ||
+          (studyMode === 'known' && recall === 'known') ||
+          (studyMode === 'favorites' && memory.favorites[word.id])
         const matchesRoot =
           rootFilter === 'all' ||
           (rootFilter === 'S' ? word.root === 'S' : String(word.rootNo) === rootFilter)
@@ -347,9 +409,20 @@ function StudyApp({
         if (sequenceMode === 'fixed' || !shuffleOrder.length) return a.deckPosition - b.deckPosition
         return (orderMap.get(a.id) ?? 0) - (orderMap.get(b.id) ?? 0)
       })
-  }, [memory.recall, partWords, query, rootFilter, sequenceMode, shuffleOrder, studyMode])
+  }, [dueIds, memory.favorites, memory.recall, partWords, query, rootFilter, sequenceMode, shuffleOrder, studyMode])
 
-  const activeWord = filteredWords[cardIndex]
+  const wordsById = useMemo(() => new Map(data?.words.map((word) => [word.id, word]) ?? []), [data])
+  const studyWords = useMemo(
+    () => cardMode === 'quiz'
+      ? quizQueue.map((id) => wordsById.get(id)).filter((word): word is VocabularyWord => Boolean(word))
+      : filteredWords,
+    [cardMode, filteredWords, quizQueue, wordsById],
+  )
+  const activeWord = studyWords[cardIndex]
+  const quizOptions = useMemo(
+    () => activeWord && quizKind !== 'spelling' ? buildQuizOptions(activeWord, partWords, quizKind) : [],
+    [activeWord, partWords, quizKind],
+  )
 
   useEffect(() => {
     if (!data) return
@@ -369,12 +442,12 @@ function StudyApp({
 
   useEffect(() => {
     if (!activeWord) return
-    const upcomingWords = filteredWords.slice(
+    const upcomingWords = studyWords.slice(
       cardIndex + 1,
       cardIndex + 1 + PRONUNCIATION_LOOKAHEAD,
     )
     for (const word of upcomingWords) preloadRecording(word.word)
-  }, [activeWord, cardIndex, filteredWords, preloadRecording])
+  }, [activeWord, cardIndex, preloadRecording, studyWords])
 
   useEffect(() => stopPronunciation, [stopPronunciation])
 
@@ -385,7 +458,7 @@ function StudyApp({
     const resetTimer = window.setTimeout(() => setFlipped(false), 0)
     const flipTimer = window.setTimeout(() => setFlipped(true), totalMilliseconds / 2)
     const nextTimer = window.setTimeout(() => {
-      if (cardIndex >= filteredWords.length - 1) {
+      if (cardIndex >= studyWords.length - 1) {
         setAutoPlay(false)
         setFlipped(true)
         return
@@ -394,10 +467,11 @@ function StudyApp({
       const nextIndex = cardIndex + 1
       setCardIndex(nextIndex)
       setFlipped(false)
-      if (sequenceMode === 'fixed' && selectedPart !== null && studyMode === 'all' && rootFilter === 'all' && !query) {
+      if (!dailyReview && !favoriteReview && cardMode === 'flashcard' && sequenceMode === 'fixed' && selectedPart !== null && studyMode === 'all' && rootFilter === 'all' && !query) {
         setMemory((current) => ({
           ...current,
           positions: { ...current.positions, [String(selectedPart)]: nextIndex },
+          updatedAt: Date.now(),
         }))
       }
     }, totalMilliseconds)
@@ -407,15 +481,45 @@ function StudyApp({
       window.clearTimeout(flipTimer)
       window.clearTimeout(nextTimer)
     }
-  }, [activeWord, autoPlay, cardDuration, cardIndex, filteredWords.length, query, rootFilter, selectedPart, sequenceMode, studyMode])
+  }, [activeWord, autoPlay, cardDuration, cardIndex, cardMode, dailyReview, favoriteReview, query, rootFilter, selectedPart, sequenceMode, studyMode, studyWords.length])
 
   const rootsForPart = useMemo(
-    () => data?.rootGroups.filter((group) => group.part === selectedPart) ?? [],
-    [data, selectedPart],
+    () => data?.rootGroups.filter((group) => dailyReview || favoriteReview
+      ? partWords.some((word) => word.root === group.root)
+      : group.part === selectedPart) ?? [],
+    [dailyReview, data, favoriteReview, partWords, selectedPart],
   )
 
   const knownCountForPart = (part: number) =>
     data?.words.filter((word) => word.part === part && memory.recall[word.id] === 'known').length ?? 0
+
+  const totalFavorites = Object.values(memory.favorites).filter(Boolean).length
+  const streak = calculateStreak(memory)
+  const todayActivity = memory.activity[localDateKey()] ??
+    { reviews: 0, known: 0, quizCorrect: 0, quizWrong: 0 }
+  const weakRoots = useMemo(() => {
+    if (!data) return []
+    const scores = new Map<string, { root: string; score: number; difficult: number }>()
+    for (const word of data.words) {
+      if (word.root === 'S') continue
+      const recall = memory.recall[word.id]
+      if (recall !== 'again' && recall !== 'hard') continue
+      const current = scores.get(word.root) ?? { root: word.root, score: 0, difficult: 0 }
+      current.score += recall === 'again' ? 3 : 2
+      current.difficult += 1
+      scores.set(word.root, current)
+    }
+    return [...scores.values()].sort((a, b) => b.score - a.score || b.difficult - a.difficult).slice(0, 3)
+  }, [data, memory.recall])
+
+  const resetQuiz = () => {
+    setCardMode('flashcard')
+    setQuizQueue([])
+    setQuizAnswer('')
+    setQuizFeedback(null)
+    setQuizComplete(false)
+    setRoundComplete(false)
+  }
 
   const chooseDeck = (deckId: DeckId) => {
     stopPronunciation()
@@ -423,10 +527,16 @@ function StudyApp({
     setData(null)
     setError('')
     setSelectedPart(null)
+    setDailyReview(false)
+    setDailyReviewIds([])
+    setFavoriteReview(false)
     setShuffleOrder([])
     setCardIndex(0)
     setFlipped(false)
     setMemory(loadMemory(deckId))
+    setSyncReady(false)
+    setSyncStatus('loading')
+    resetQuiz()
     setSelectedDeck(deckId)
   }
 
@@ -438,12 +548,17 @@ function StudyApp({
     setShuffleOrder(mode === 'random' ? shuffledWordIds(partWords) : [])
     setCardIndex(0)
     setFlipped(false)
+    setSessionReviewedIds([])
+    resetQuiz()
   }
 
   const openPart = (part: number) => {
     unlockAudio()
     setAutoPlay(false)
     setSelectedPart(part)
+    setDailyReview(false)
+    setDailyReviewIds([])
+    setFavoriteReview(false)
     setStudyMode('all')
     setRootFilter('all')
     setQuery('')
@@ -451,31 +566,75 @@ function StudyApp({
     setShuffleOrder(sequenceMode === 'random' ? shuffledWordIds(wordsForPart) : [])
     setCardIndex(sequenceMode === 'fixed' ? Math.max(0, memory.positions[String(part)] ?? 0) : 0)
     setFlipped(false)
+    setSessionReviewedIds([])
+    resetQuiz()
+  }
+
+  const openDailyReview = () => {
+    unlockAudio()
+    setAutoPlay(false)
+    setSelectedPart(0)
+    setDailyReview(true)
+    setFavoriteReview(false)
+    setStudyMode('all')
+    setRootFilter('all')
+    setQuery('')
+    const dueWords = data?.words.filter((word) => dueIds.has(word.id)) ?? []
+    setDailyReviewIds(dueWords.map((word) => word.id))
+    setShuffleOrder(shuffledWordIds(dueWords))
+    setCardIndex(0)
+    setFlipped(false)
+    setSessionReviewedIds([])
+    resetQuiz()
+  }
+
+  const openFavorites = () => {
+    unlockAudio()
+    setAutoPlay(false)
+    setSelectedPart(0)
+    setDailyReview(false)
+    setDailyReviewIds([])
+    setFavoriteReview(true)
+    setStudyMode('all')
+    setRootFilter('all')
+    setQuery('')
+    const favoriteWords = data?.words.filter((word) => memory.favorites[word.id]) ?? []
+    setShuffleOrder(sequenceMode === 'random' ? shuffledWordIds(favoriteWords) : [])
+    setCardIndex(0)
+    setFlipped(false)
+    setSessionReviewedIds([])
+    resetQuiz()
   }
 
   const moveCard = (direction: -1 | 1) => {
-    if (!filteredWords.length) return
+    if (!studyWords.length) return
     unlockAudio()
-    const next = Math.min(Math.max(cardIndex + direction, 0), filteredWords.length - 1)
+    const next = Math.min(Math.max(cardIndex + direction, 0), studyWords.length - 1)
     setCardIndex(next)
     setFlipped(false)
-    if (sequenceMode === 'fixed' && selectedPart !== null && studyMode === 'all' && rootFilter === 'all' && !query) {
+    if (!dailyReview && !favoriteReview && cardMode === 'flashcard' && sequenceMode === 'fixed' && selectedPart !== null && studyMode === 'all' && rootFilter === 'all' && !query) {
       setMemory((current) => ({
         ...current,
         positions: { ...current.positions, [String(selectedPart)]: next },
+        updatedAt: Date.now(),
       }))
     }
   }
 
   const markRecall = (recall: RecallState) => {
     if (!activeWord) return
-    setMemory((current) => ({
-      ...current,
-      recall: { ...current.recall, [activeWord.id]: recall },
-    }))
-    if (cardIndex < filteredWords.length - 1) {
+    setMemory((current) => recordReview(current, activeWord.id, recall))
+    setSessionReviewedIds((current) => current.includes(activeWord.id) ? current : [...current, activeWord.id])
+    if (cardIndex < studyWords.length - 1) {
       window.setTimeout(() => moveCard(1), 100)
+    } else if (dailyReview) {
+      window.setTimeout(() => setRoundComplete(true), 180)
     }
+  }
+
+  const toggleActiveFavorite = () => {
+    if (!activeWord) return
+    setMemory((current) => toggleFavorite(current, activeWord.id))
   }
 
   const applyMode = (mode: StudyMode) => {
@@ -484,6 +643,7 @@ function StudyApp({
     setStudyMode(mode)
     setCardIndex(0)
     setFlipped(false)
+    resetQuiz()
   }
 
   const applyRoot = (root: string) => {
@@ -492,6 +652,7 @@ function StudyApp({
     setRootFilter(root)
     setCardIndex(0)
     setFlipped(false)
+    resetQuiz()
   }
 
   const shuffleDeck = () => {
@@ -508,6 +669,10 @@ function StudyApp({
     stopPronunciation()
     setAutoPlay(false)
     setSelectedPart(null)
+    setDailyReview(false)
+    setDailyReviewIds([])
+    setFavoriteReview(false)
+    resetQuiz()
   }
 
   const changeDeck = () => {
@@ -516,10 +681,58 @@ function StudyApp({
     setData(null)
     setSelectedDeck(null)
     setSelectedPart(null)
+    setDailyReview(false)
+    setDailyReviewIds([])
+    setFavoriteReview(false)
     setShuffleOrder([])
     setCardIndex(0)
     setFlipped(false)
     setError('')
+    setSyncReady(false)
+    setSyncStatus('idle')
+    resetQuiz()
+  }
+
+  const startQuiz = (kind: QuizKind) => {
+    unlockAudio()
+    setAutoPlay(false)
+    setCardMode('quiz')
+    setQuizKind(kind)
+    setQuizQueue(filteredWords.map((word) => word.id))
+    setQuizAnswer('')
+    setQuizFeedback(null)
+    setQuizComplete(false)
+    setCardIndex(0)
+    setFlipped(false)
+  }
+
+  const showFlashcards = () => {
+    resetQuiz()
+    setCardIndex(0)
+    setFlipped(false)
+  }
+
+  const submitQuizAnswer = (answer: string) => {
+    if (!activeWord || quizFeedback) return
+    const correctValue = quizValue(activeWord, quizKind)
+    const correct = quizKind === 'spelling'
+      ? normalizeSpelling(answer) === normalizeSpelling(correctValue)
+      : answer === correctValue
+    setQuizFeedback({ correct, correctValue })
+    setMemory((current) => recordReview(current, activeWord.id, correct ? 'known' : 'again', correct ? 'correct' : 'wrong'))
+    setSessionReviewedIds((current) => current.includes(activeWord.id) ? current : [...current, activeWord.id])
+    const nextQuiz = advanceQuiz(quizQueue, cardIndex, activeWord.id, correct)
+    setQuizQueue(nextQuiz.queue)
+
+    window.setTimeout(() => {
+      if (nextQuiz.complete) {
+        setQuizComplete(true)
+      } else {
+        setCardIndex(nextQuiz.nextIndex)
+      }
+      setQuizAnswer('')
+      setQuizFeedback(null)
+    }, 850)
   }
 
   const toggleAutoPlay = () => {
@@ -540,6 +753,7 @@ function StudyApp({
     const handleKey = (event: KeyboardEvent) => {
       const target = event.target as HTMLElement | null
       if (target?.tagName === 'INPUT' || target?.tagName === 'SELECT') return
+      if (cardMode === 'quiz') return
       if (event.key === 'ArrowLeft') moveCard(-1)
       if (event.key === 'ArrowRight') moveCard(1)
       if (event.key === ' ' || event.key === 'Enter') {
@@ -631,6 +845,10 @@ function StudyApp({
           <div className="brand-actions">
             <button className="change-deck-button" onClick={changeDeck} type="button">{data.meta.title}</button>
             <span className="word-total">已背 {totalKnown.toLocaleString()} · 剩 {totalRemaining.toLocaleString()}</span>
+            <span className={`sync-indicator sync-${syncStatus}`} title={syncStatus === 'offline' ? '目前離線，進度已保存在本機' : '學習進度會同步到你的帳號'}>
+              {syncStatus === 'offline' ? <CloudOff size={14} /> : <Cloud size={14} />}
+              <span>{syncStatus === 'loading' ? '同步中' : syncStatus === 'offline' ? '本機保存' : '已同步'}</span>
+            </span>
             {session.isAdmin && (
               <button aria-label="帳號審核" className="account-review-button" onClick={onManageAccounts} type="button">
                 <ShieldCheck size={15} /><span>帳號審核</span>
@@ -646,8 +864,31 @@ function StudyApp({
           <p className="eyebrow">{data.meta.title}</p>
           <h1>選一份，開始把字<br />連成有意義的家族。</h1>
           <p className="intro-copy">
-            全部 {data.meta.totalWords.toLocaleString()} 張字卡分成五份；同字根不拆散，無字根字平均穿插。進入每張卡會自動播放美式發音。
+            全部 {data.meta.totalWords.toLocaleString()} 張字卡分成五份；同字根不拆散。學習進度會跟著登入帳號跨裝置同步。
           </p>
+        </section>
+
+        <section className="learning-dashboard" aria-labelledby="daily-review-heading">
+          <button className="daily-review-card" disabled={dueIds.size === 0} onClick={openDailyReview} type="button">
+            <span className="dashboard-icon"><Brain size={22} /></span>
+            <span>
+              <small>SPACED REVIEW</small>
+              <strong id="daily-review-heading">今天待複習 {dueIds.size} 字</strong>
+              <em>{dueIds.size ? '依照你的記憶程度安排，現在開始複習' : '今天已完成；繼續背新字就會建立複習排程'}</em>
+            </span>
+            <ChevronRight size={20} />
+          </button>
+          <div className="stat-grid" aria-label="學習統計">
+            <div><BarChart3 size={17} /><span>今日練習</span><strong>{todayActivity.reviews}</strong><small>字</small></div>
+            <div><Flame size={17} /><span>連續學習</span><strong>{streak}</strong><small>天</small></div>
+            <button disabled={totalFavorites === 0} onClick={openFavorites} type="button"><Star size={17} /><span>收藏難字</span><strong>{totalFavorites}</strong><small>字</small></button>
+          </div>
+          <div className="weak-roots">
+            <span>需要加強的字根</span>
+            {weakRoots.length ? weakRoots.map((root) => (
+              <small key={root.root}>{root.root} · {root.difficult} 字</small>
+            )) : <small>完成幾張字卡後，這裡會找出最弱的字根</small>}
+          </div>
         </section>
 
         <section className="sequence-picker" aria-labelledby="sequence-heading">
@@ -671,7 +912,7 @@ function StudyApp({
               <p className="section-kicker">TODAY'S DECK</p>
               <h2 id="part-heading">今天想背哪一份？</h2>
             </div>
-            <p>App 不另設密碼，進度只存在這支裝置</p>
+            <p>進度會同步至目前登入帳號</p>
           </div>
 
           <div className="part-grid">
@@ -698,8 +939,12 @@ function StudyApp({
   }
 
   const partSummary = data.parts.find((part) => part.id === selectedPart)
-  const partKnown = knownCountForPart(selectedPart)
-  const partTotal = partSummary?.totalWordCount ?? 0
+  const partKnown = dailyReview
+    ? sessionReviewedIds.length
+    : favoriteReview
+      ? partWords.filter((word) => memory.recall[word.id] === 'known').length
+      : knownCountForPart(selectedPart)
+  const partTotal = dailyReview ? dailyReviewIds.length : favoriteReview ? partWords.length : partSummary?.totalWordCount ?? 0
   const partRemaining = partTotal - partKnown
   const partKnownPercent = partTotal ? Math.round((partKnown / partTotal) * 100) : 0
   const currentRecall = activeWord ? memory.recall[activeWord.id] : undefined
@@ -717,10 +962,10 @@ function StudyApp({
           <ArrowLeft size={20} />
         </Button>
         <div className="study-title">
-          <span>{data.meta.title} · PART {selectedPart}</span>
-          <strong>{filteredWords.length ? `${cardIndex + 1} / ${filteredWords.length}` : '沒有符合的字卡'}</strong>
+          <span>{data.meta.title} · {dailyReview ? '今日複習' : favoriteReview ? '收藏難字' : `PART ${selectedPart}`}</span>
+          <strong>{studyWords.length ? `${Math.min(cardIndex + 1, studyWords.length)} / ${studyWords.length}` : quizComplete ? '本輪完成' : '沒有符合的字卡'}</strong>
         </div>
-        {sequenceMode === 'random' ? (
+        {cardMode === 'flashcard' && sequenceMode === 'random' ? (
           <Button aria-label="重新打亂目前這份" className="icon-button" onClick={shuffleDeck} size="icon" variant="ghost">
             <Shuffle size={18} />
           </Button>
@@ -728,12 +973,12 @@ function StudyApp({
       </header>
 
       <div className="progress-track" aria-label="目前卡組進度">
-        <span style={{ width: filteredWords.length ? `${((cardIndex + 1) / filteredWords.length) * 100}%` : '0%' }} />
+        <span style={{ width: studyWords.length ? `${Math.min(100, ((cardIndex + 1) / studyWords.length) * 100)}%` : quizComplete ? '100%' : '0%' }} />
       </div>
 
       <section className="memory-progress" aria-labelledby="memory-progress-heading">
         <div className="memory-progress-heading">
-          <span id="memory-progress-heading">本份背誦進度</span>
+          <span id="memory-progress-heading">{dailyReview ? '今日複習進度' : favoriteReview ? '收藏熟悉度' : '本份背誦進度'}</span>
           <strong>{partKnownPercent}%</strong>
         </div>
         <div className="memory-progress-track" aria-hidden="true">
@@ -741,7 +986,7 @@ function StudyApp({
         </div>
         <table className="memory-progress-table">
           <thead>
-            <tr><th scope="col">已背</th><th scope="col">還剩</th><th scope="col">全部</th></tr>
+            <tr><th scope="col">{dailyReview ? '已複習' : '已背'}</th><th scope="col">還剩</th><th scope="col">全部</th></tr>
           </thead>
           <tbody>
             <tr>
@@ -754,6 +999,20 @@ function StudyApp({
       </section>
 
       <section className="study-toolbar" aria-label="篩選字卡">
+        <div className="practice-tabs" aria-label="學習方式">
+          <button aria-pressed={cardMode === 'flashcard'} className={cardMode === 'flashcard' ? 'is-active' : ''} onClick={showFlashcards} type="button">
+            <RotateCcw size={15} /><span>字卡</span>
+          </button>
+          <button aria-pressed={cardMode === 'quiz' && quizKind === 'meaning'} className={cardMode === 'quiz' && quizKind === 'meaning' ? 'is-active' : ''} onClick={() => startQuiz('meaning')} type="button">
+            <Languages size={15} /><span>意思</span>
+          </button>
+          <button aria-pressed={cardMode === 'quiz' && quizKind === 'root'} className={cardMode === 'quiz' && quizKind === 'root' ? 'is-active' : ''} onClick={() => startQuiz('root')} type="button">
+            <Sprout size={15} /><span>字根</span>
+          </button>
+          <button aria-pressed={cardMode === 'quiz' && quizKind === 'spelling'} className={cardMode === 'quiz' && quizKind === 'spelling' ? 'is-active' : ''} onClick={() => startQuiz('spelling')} type="button">
+            <Keyboard size={15} /><span>拼字</span>
+          </button>
+        </div>
         <div className="study-sequence-tabs" aria-label="單字順序">
           <button aria-pressed={sequenceMode === 'fixed'} className={sequenceMode === 'fixed' ? 'is-active' : ''} onClick={() => applySequenceMode('fixed')} type="button">
             固定 · 同字根連續
@@ -767,6 +1026,7 @@ function StudyApp({
             ['all', '全部'],
             ['review', '待複習'],
             ['known', '已記住'],
+            ['favorites', '收藏'],
           ] as const).map(([mode, label]) => (
             <button className={studyMode === mode ? 'is-active' : ''} key={mode} onClick={() => applyMode(mode)} type="button">
               {label}
@@ -778,12 +1038,12 @@ function StudyApp({
             <Search size={16} aria-hidden="true" />
             <input
               aria-label="搜尋單字、字根或意思"
-              onChange={(event) => { setAutoPlay(false); setQuery(event.target.value); setCardIndex(0); setFlipped(false) }}
+              onChange={(event) => { setAutoPlay(false); setQuery(event.target.value); setCardIndex(0); setFlipped(false); resetQuiz() }}
               placeholder="搜尋單字或意思"
               value={query}
             />
             {query && (
-              <button aria-label="清除搜尋" onClick={() => { setAutoPlay(false); setQuery('') }} type="button"><X size={15} /></button>
+              <button aria-label="清除搜尋" onClick={() => { setAutoPlay(false); setQuery(''); resetQuiz() }} type="button"><X size={15} /></button>
             )}
           </label>
           <select aria-label="選擇字根家族" onChange={(event) => applyRoot(event.target.value)} value={rootFilter}>
@@ -791,10 +1051,10 @@ function StudyApp({
             {rootsForPart.map((group) => (
               <option key={group.rootNo} value={group.rootNo}>#{group.rootNo} · {group.root}</option>
             ))}
-            <option value="S">S · 無字根（{partSummary?.sWordCount ?? 0}）</option>
+            <option value="S">S · 無字根（{partWords.filter((word) => word.root === 'S').length}）</option>
           </select>
         </div>
-        <div className={`autoplay-panel ${autoPlay ? 'is-playing' : ''}`}>
+        {cardMode === 'flashcard' && <div className={`autoplay-panel ${autoPlay ? 'is-playing' : ''}`}>
           <button aria-pressed={autoPlay} className="autoplay-toggle" onClick={toggleAutoPlay} type="button">
             {autoPlay ? <Pause size={18} /> : <Play size={18} />}
             <span>
@@ -815,15 +1075,87 @@ function StudyApp({
               ))}
             </select>
           </label>
-        </div>
-        {autoPlay && activeWord && (
+        </div>}
+        {cardMode === 'flashcard' && autoPlay && activeWord && (
           <div className="autoplay-timeline" aria-label={`這張字卡停留 ${cardDuration} 秒`}>
             <span key={`${activeWord.id}-${cardDuration}`} style={{ animationDuration: `${cardDuration}s` }} />
           </div>
         )}
       </section>
 
-      {activeWord ? (
+      {roundComplete ? (
+        <section className="empty-state quiz-complete">
+          <Check size={30} />
+          <h2>今天的複習完成</h2>
+          <p>新的複習日期已依照「還不熟／有點模糊／記住了」自動安排。</p>
+          <Button onClick={returnHome}>回到學習首頁</Button>
+        </section>
+      ) : quizComplete ? (
+        <section className="empty-state quiz-complete">
+          <Check size={30} />
+          <h2>這輪測驗完成</h2>
+          <p>答錯的單字都已回到隊列再次作答，並排入今天的複習。</p>
+          <div className="completion-actions">
+            <Button onClick={() => startQuiz(quizKind)}>再測一次</Button>
+            <Button onClick={showFlashcards} variant="outline">回到字卡</Button>
+          </div>
+        </section>
+      ) : activeWord ? (cardMode === 'quiz' ? (
+        <section className="study-stage quiz-stage">
+          <div className={`quiz-card ${quizFeedback ? (quizFeedback.correct ? 'is-correct' : 'is-wrong') : ''}`}>
+            <div className="quiz-topline">
+              <span>{quizKind === 'meaning' ? '選出中文意思' : quizKind === 'root' ? '選出正確字根' : '聽發音／看意思拼出單字'}</span>
+              <button aria-label={memory.favorites[activeWord.id] ? '取消收藏' : '收藏這個單字'} className={`favorite-button ${memory.favorites[activeWord.id] ? 'is-favorite' : ''}`} onClick={toggleActiveFavorite} type="button">
+                <Star fill={memory.favorites[activeWord.id] ? 'currentColor' : 'none'} size={18} />
+              </button>
+            </div>
+
+            {quizKind === 'spelling' ? (
+              <div className="quiz-prompt spelling-prompt">
+                <p>{activeWord.meaning}</p>
+                <button className={`pronounce-button status-${pronunciationStatus}`} onClick={() => void playPronunciation(activeWord.word)} type="button">
+                  {pronunciationStatus === 'loading' ? <LoaderCircle className="pronounce-spinner" size={17} /> : <Volume2 size={17} />}
+                  再聽一次發音
+                </button>
+              </div>
+            ) : (
+              <div className="quiz-prompt">
+                <h2>{activeWord.word}</h2>
+                {activeWord.pronunciation && <p>/{activeWord.pronunciation}/</p>}
+              </div>
+            )}
+
+            {quizKind === 'spelling' ? (
+              <form className="spelling-form" onSubmit={(event) => { event.preventDefault(); submitQuizAnswer(quizAnswer) }}>
+                <input autoCapitalize="none" autoComplete="off" autoCorrect="off" disabled={Boolean(quizFeedback)} onChange={(event) => setQuizAnswer(event.target.value)} placeholder="輸入英文單字" spellCheck="false" value={quizAnswer} />
+                <Button disabled={!quizAnswer.trim() || Boolean(quizFeedback)} type="submit">送出答案</Button>
+              </form>
+            ) : (
+              <div className="quiz-options">
+                {quizOptions.map((option) => {
+                  const isCorrectOption = option === quizValue(activeWord, quizKind)
+                  const selectedWrong = quizFeedback && !quizFeedback.correct && option !== quizFeedback.correctValue
+                  return (
+                    <button
+                      className={quizFeedback ? (isCorrectOption ? 'is-answer' : selectedWrong ? 'is-muted' : '') : ''}
+                      disabled={Boolean(quizFeedback)}
+                      key={option}
+                      onClick={() => submitQuizAnswer(option)}
+                      type="button"
+                    >{option}</button>
+                  )
+                })}
+              </div>
+            )}
+
+            {quizFeedback && (
+              <p className="quiz-feedback" aria-live="polite">
+                {quizFeedback.correct ? '答對了，繼續下一題' : `答錯了；正確答案是：${quizFeedback.correctValue}`}
+              </p>
+            )}
+          </div>
+        </section>
+      ) : (
         <section className="study-stage">
           <div
             aria-label={flipped ? '查看單字正面' : '查看單字解釋'}
@@ -842,8 +1174,13 @@ function StudyApp({
               <div className="card-front">
                 <div className="card-topline">
                   <span>{activeWord.root === 'S' ? 'NO ROOT' : `ROOT ${activeWord.rootNo}`}</span>
-                  <span className={`recall-dot recall-${currentRecall ?? 'new'}`}>
-                    {currentRecall === 'known' ? '已記住' : currentRecall === 'hard' ? '模糊' : currentRecall === 'again' ? '待複習' : `FREQ ${activeWord.frequency}`}
+                  <span className="card-top-actions">
+                    <button aria-label={memory.favorites[activeWord.id] ? '取消收藏' : '收藏這個單字'} className={`favorite-button ${memory.favorites[activeWord.id] ? 'is-favorite' : ''}`} onClick={(event) => { event.stopPropagation(); toggleActiveFavorite() }} type="button">
+                      <Star fill={memory.favorites[activeWord.id] ? 'currentColor' : 'none'} size={16} />
+                    </button>
+                    <span className={`recall-dot recall-${currentRecall ?? 'new'}`}>
+                      {currentRecall === 'known' ? '已記住' : currentRecall === 'hard' ? '模糊' : currentRecall === 'again' ? '待複習' : `FREQ ${activeWord.frequency}`}
+                    </span>
                   </span>
                 </div>
                 <div className="word-block">
@@ -916,10 +1253,10 @@ function StudyApp({
             </nav>
           )}
         </section>
-      ) : (
+      )) : (
         <section className="empty-state">
           <Check size={26} />
-          <h2>{studyMode === 'review' ? '目前沒有待複習的字卡' : '找不到符合條件的字卡'}</h2>
+          <h2>{dailyReview ? '今天的複習已完成' : favoriteReview || studyMode === 'favorites' ? '目前還沒有收藏單字' : studyMode === 'review' ? '目前沒有到期的複習' : '找不到符合條件的字卡'}</h2>
           <p>可以切回「全部」，或清除搜尋與字根篩選。</p>
           <Button onClick={() => { applyMode('all'); applyRoot('all'); setQuery('') }} variant="outline">顯示全部字卡</Button>
         </section>

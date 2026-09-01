@@ -17,6 +17,10 @@ class FakeStatement {
   }
 
   first() {
+    if (this.sql.includes('study_progress')) {
+      const key = `${String(this.values[0] ?? '').toLocaleLowerCase()}|${this.values[1] ?? ''}`
+      return Promise.resolve(this.db.progress.get(key) ?? null)
+    }
     const email = String(this.values[0] ?? '').toLocaleLowerCase()
     return Promise.resolve(this.db.accounts.get(email) ?? null)
   }
@@ -29,6 +33,7 @@ class FakeStatement {
 class FakeD1 {
   constructor() {
     this.accounts = new Map()
+    this.progress = new Map()
   }
 
   prepare(sql) {
@@ -41,6 +46,20 @@ class FakeD1 {
 
   async run(sql, values) {
     if (sql.includes('CREATE TABLE') || sql.includes('CREATE INDEX')) return { meta: { changes: 0 } }
+
+    if (sql.includes('INSERT INTO study_progress')) {
+      const [rawEmail, deckId, progressJson, clientUpdatedAt] = values
+      const key = `${String(rawEmail).toLocaleLowerCase()}|${deckId}`
+      const existing = this.progress.get(key)
+      if (!existing || Number(clientUpdatedAt) >= Number(existing.client_updated_at)) {
+        this.progress.set(key, {
+          progress_json: progressJson,
+          client_updated_at: Number(clientUpdatedAt),
+          updated_at: '2026-09-01 00:02:00',
+        })
+      }
+      return { meta: { changes: 1 } }
+    }
 
     if (sql.includes('INSERT INTO account_access')) {
       const email = String(values[0] ?? '').toLocaleLowerCase()
@@ -107,6 +126,8 @@ if (pendingPayload.status !== 'pending' || pendingPayload.isAdmin) throw new Err
 
 const blockedVocabulary = await worker.fetch(signedRequest('/api/vocabulary', pendingEmail), env)
 if (blockedVocabulary.status !== 403) throw new Error(`Pending learner got vocabulary: ${blockedVocabulary.status}`)
+const blockedProgress = await worker.fetch(signedRequest('/api/progress?deck=words1000', pendingEmail), env)
+if (blockedProgress.status !== 403) throw new Error(`Pending learner got progress: ${blockedProgress.status}`)
 
 const adminEmail = ADMIN_EMAILS[0]
 const approvedVocabulary = await worker.fetch(signedRequest('/api/vocabulary', adminEmail), env)
@@ -122,6 +143,27 @@ if (approvedVocabulary1000Payload.meta.totalWords !== 1085 || approvedVocabulary
 
 const invalidDeck = await worker.fetch(signedRequest('/api/vocabulary?deck=unknown', adminEmail), env)
 if (invalidDeck.status !== 400) throw new Error(`Unknown deck was not rejected: ${invalidDeck.status}`)
+
+const initialProgress = await worker.fetch(signedRequest('/api/progress?deck=words1000', adminEmail), env)
+if (initialProgress.status !== 200 || (await initialProgress.json()).progress !== null) throw new Error('Initial progress was not empty')
+const progressSnapshot = {
+  version: 3,
+  recall: { 'word1000-1': 'known' },
+  positions: { '1': 4 },
+  schedule: { 'word1000-1': { dueAt: 123, intervalDays: 7, lastReviewedAt: 100, repetitions: 1 } },
+  favorites: { 'word1000-2': true },
+  activity: { '2026-09-01': { reviews: 1, known: 1, quizCorrect: 0, quizWrong: 0 } },
+  updatedAt: 456,
+}
+const savedProgress = await worker.fetch(signedRequest('/api/progress?deck=words1000', adminEmail, {
+  method: 'PUT',
+  headers: { 'content-type': 'application/json', origin: 'https://gre.example.test' },
+  body: JSON.stringify({ progress: progressSnapshot }),
+}), env)
+if (savedProgress.status !== 200) throw new Error(`Progress save failed: ${savedProgress.status}`)
+const loadedProgress = await worker.fetch(signedRequest('/api/progress?deck=words1000', adminEmail), env)
+const loadedProgressPayload = await loadedProgress.json()
+if (loadedProgressPayload.progress?.favorites?.['word1000-2'] !== true) throw new Error('Progress did not round-trip')
 
 const approval = await worker.fetch(signedRequest(`/api/admin/accounts/${encodeURIComponent(pendingEmail)}`, adminEmail, {
   method: 'POST',
@@ -139,4 +181,5 @@ console.log(JSON.stringify({
   anonymous: 'blocked',
   pending: 'blocked',
   approved: 'allowed',
+  progressSync: 'isolated and persistent',
 }, null, 2))

@@ -6,6 +6,7 @@ import tailwindcss from '@tailwindcss/vite'
 import { defineConfig } from 'vite'
 
 const DEV_ADMIN_EMAIL = 'wy.lee@ntub.edu.tw'
+const localProgress = new Map<string, unknown>()
 
 function localAccessApi() {
   return {
@@ -41,6 +42,23 @@ function localAccessApi() {
           response.setHeader('content-type', 'application/json; charset=utf-8')
           response.end(await readFile(new URL(deckFile, import.meta.url)))
           return
+        }
+
+        if (requestUrl.pathname === '/api/progress' && approved) {
+          const deckId = requestUrl.searchParams.get('deck') ?? 'words2000'
+          response.setHeader('content-type', 'application/json; charset=utf-8')
+          if (request.method === 'GET') {
+            response.end(JSON.stringify({ progress: localProgress.get(deckId) ?? null }))
+            return
+          }
+          if (request.method === 'PUT') {
+            let body = ''
+            for await (const chunk of request) body += chunk
+            const payload = JSON.parse(body) as { progress?: unknown }
+            localProgress.set(deckId, payload.progress ?? null)
+            response.end(JSON.stringify({ ok: true }))
+            return
+          }
         }
 
         if (requestUrl.pathname === '/api/admin/accounts' && request.method === 'GET' && approved) {
