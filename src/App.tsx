@@ -51,6 +51,7 @@ import './App.css'
 
 type StudyMode = 'all' | 'review' | 'known' | 'favorites'
 type PronunciationStatus = 'idle' | 'loading' | 'recording' | 'device' | 'unavailable'
+type MandarinStatus = 'idle' | 'speaking' | 'unavailable'
 type SequenceMode = 'fixed' | 'random'
 type CardMode = 'flashcard' | 'quiz'
 type SyncStatus = 'idle' | 'loading' | 'synced' | 'offline'
@@ -94,6 +95,7 @@ type VocabularyData = {
 
 const SEQUENCE_MODE_KEY = 'gre-roots-sequence-mode-v1'
 const AUTOPLAY_SECONDS_KEY = 'gre-roots-autoplay-seconds-v1'
+const MANDARIN_AUTOPLAY_KEY = 'gre-roots-mandarin-autoplay-v1'
 const AUTOPLAY_OPTIONS = [3, 5, 8, 10, 15, 20, 30] as const
 const PRONUNCIATION_LOOKAHEAD = 20
 const PRONUNCIATION_LOOKUP_WAIT_MS = 240
@@ -118,6 +120,59 @@ function shuffledWordIds(words: VocabularyWord[]) {
 function loadAutoplaySeconds() {
   const saved = Number(window.localStorage.getItem(AUTOPLAY_SECONDS_KEY))
   return AUTOPLAY_OPTIONS.includes(saved as (typeof AUTOPLAY_OPTIONS)[number]) ? saved : 8
+}
+
+function loadMandarinAutoplay() {
+  return window.localStorage.getItem(MANDARIN_AUTOPLAY_KEY) === 'on'
+}
+
+type MeaningSections = {
+  primary: string
+  synonyms: string[]
+  antonyms: string[]
+  memoryNotes: string[]
+}
+
+function splitMeaningSections(value: string): MeaningSections {
+  const matches = [...value.matchAll(/\[(類|反|記)\]\s*/g)]
+  if (!matches.length) return { primary: value.trim(), synonyms: [], antonyms: [], memoryNotes: [] }
+
+  const sections: MeaningSections = {
+    primary: value.slice(0, matches[0].index).trim(),
+    synonyms: [],
+    antonyms: [],
+    memoryNotes: [],
+  }
+
+  matches.forEach((match, index) => {
+    const start = (match.index ?? 0) + match[0].length
+    const end = matches[index + 1]?.index ?? value.length
+    const content = value.slice(start, end).trim()
+    if (!content) return
+    if (match[1] === '類') sections.synonyms.push(content)
+    if (match[1] === '反') sections.antonyms.push(content)
+    if (match[1] === '記') sections.memoryNotes.push(content)
+  })
+
+  return sections
+}
+
+function mandarinSpeechText(value: string) {
+  return value
+    .replace(/[^\p{Script=Han}0-9，。；、：！？（）\s]/gu, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+function selectMandarinVoice(voices: SpeechSynthesisVoice[]) {
+  const candidates = voices.filter((voice) => {
+    const language = voice.lang.toLocaleLowerCase()
+    return language === 'zh-tw' || language.startsWith('zh-hant') || language.startsWith('zh')
+  })
+  return candidates.find((voice) => /natural|premium|enhanced|online|hsiaochen|hanhan|yating|meijia|google/i.test(voice.name)) ??
+    candidates.find((voice) => voice.lang.toLocaleLowerCase() === 'zh-tw') ??
+    candidates[0] ??
+    null
 }
 
 function StudyApp({
@@ -153,12 +208,15 @@ function StudyApp({
   const [roundComplete, setRoundComplete] = useState(false)
   const [error, setError] = useState('')
   const [pronunciationStatus, setPronunciationStatus] = useState<PronunciationStatus>('idle')
+  const [mandarinStatus, setMandarinStatus] = useState<MandarinStatus>('idle')
+  const [mandarinAutoplay, setMandarinAutoplay] = useState(loadMandarinAutoplay)
   const [autoPlay, setAutoPlay] = useState(false)
   const [cardDuration, setCardDuration] = useState(loadAutoplaySeconds)
   const touchStartX = useRef<number | null>(null)
   const audioRef = useRef<HTMLAudioElement | null>(null)
   const audioUnlockedRef = useRef(false)
   const pronunciationRequestRef = useRef(0)
+  const mandarinRequestRef = useRef(0)
   const pronunciationCacheRef = useRef(new Map<string, Promise<string | null>>())
   const pronunciationPreloadRef = useRef(new Map<string, HTMLAudioElement>())
 
@@ -238,6 +296,8 @@ function StudyApp({
     const requestId = pronunciationRequestRef.current + 1
     pronunciationRequestRef.current = requestId
     setPronunciationStatus('loading')
+    mandarinRequestRef.current += 1
+    setMandarinStatus('idle')
 
     if (audioRef.current) {
       audioRef.current.pause()
@@ -301,11 +361,47 @@ function StudyApp({
     speakWithDevice(word, requestId)
   }, [findRecording, speakWithDevice])
 
+  const speakMandarin = useCallback((meaning: string) => {
+    const requestId = mandarinRequestRef.current + 1
+    mandarinRequestRef.current = requestId
+    pronunciationRequestRef.current += 1
+    audioRef.current?.pause()
+    setPronunciationStatus('idle')
+
+    const text = mandarinSpeechText(meaning)
+    if (!text || !('speechSynthesis' in window)) {
+      setMandarinStatus('unavailable')
+      return
+    }
+
+    const synth = window.speechSynthesis
+    synth.cancel()
+    const utterance = new SpeechSynthesisUtterance(text)
+    utterance.lang = 'zh-TW'
+    utterance.voice = selectMandarinVoice(synth.getVoices())
+    utterance.rate = 0.9
+    utterance.pitch = 1
+    utterance.onstart = () => {
+      if (requestId === mandarinRequestRef.current) setMandarinStatus('speaking')
+    }
+    utterance.onend = () => {
+      if (requestId === mandarinRequestRef.current) setMandarinStatus('idle')
+    }
+    utterance.onerror = (event) => {
+      if (requestId !== mandarinRequestRef.current || event.error === 'canceled') return
+      setMandarinStatus('unavailable')
+    }
+    setMandarinStatus('speaking')
+    synth.speak(utterance)
+  }, [])
+
   const stopPronunciation = useCallback(() => {
     pronunciationRequestRef.current += 1
+    mandarinRequestRef.current += 1
     audioRef.current?.pause()
     window.speechSynthesis?.cancel()
     setPronunciationStatus('idle')
+    setMandarinStatus('idle')
   }, [])
 
   useEffect(() => {
@@ -419,6 +515,10 @@ function StudyApp({
     [cardMode, filteredWords, quizQueue, wordsById],
   )
   const activeWord = studyWords[cardIndex]
+  const activeMeaningSections = useMemo(
+    () => activeWord ? splitMeaningSections(activeWord.meaning) : null,
+    [activeWord],
+  )
   const quizOptions = useMemo(
     () => activeWord && quizKind !== 'spelling' ? buildQuizOptions(activeWord, partWords, quizKind) : [],
     [activeWord, partWords, quizKind],
@@ -439,6 +539,12 @@ function StudyApp({
     }, 80)
     return () => window.clearTimeout(timeout)
   }, [activeWord, playPronunciation])
+
+  useEffect(() => {
+    if (!activeWord || !activeMeaningSections || !flipped || !mandarinAutoplay || cardMode !== 'flashcard') return
+    const timeout = window.setTimeout(() => speakMandarin(activeMeaningSections.primary), 80)
+    return () => window.clearTimeout(timeout)
+  }, [activeMeaningSections, activeWord, cardMode, flipped, mandarinAutoplay, speakMandarin])
 
   useEffect(() => {
     if (!activeWord) return
@@ -744,6 +850,18 @@ function StudyApp({
     setAutoPlay((playing) => !playing)
   }
 
+  const toggleMandarinAutoplay = () => {
+    unlockAudio()
+    const nextValue = !mandarinAutoplay
+    setMandarinAutoplay(nextValue)
+    window.localStorage.setItem(MANDARIN_AUTOPLAY_KEY, nextValue ? 'on' : 'off')
+    if (!nextValue) {
+      mandarinRequestRef.current += 1
+      window.speechSynthesis?.cancel()
+      setMandarinStatus('idle')
+    }
+  }
+
   const changeCardDuration = (seconds: number) => {
     setCardDuration(seconds)
     if (autoPlay) setFlipped(false)
@@ -954,6 +1072,10 @@ function StudyApp({
     pronunciationStatus === 'loading' ? '載入美式發音' :
     pronunciationStatus === 'unavailable' ? '重新播放發音' :
     '播放美式發音'
+  const mandarinLabel =
+    mandarinStatus === 'speaking' ? '正在播放中文語音' :
+    mandarinStatus === 'unavailable' ? '此裝置無法播放中文語音' :
+    '播放中文語音'
 
   return (
     <main className="app-shell study-shell">
@@ -1076,6 +1198,18 @@ function StudyApp({
             </select>
           </label>
         </div>}
+        {cardMode === 'flashcard' && (
+          <div className={`mandarin-audio-panel ${mandarinAutoplay ? 'is-enabled' : ''}`}>
+            <button aria-pressed={mandarinAutoplay} onClick={toggleMandarinAutoplay} type="button">
+              <Volume2 size={18} aria-hidden="true" />
+              <span>
+                <strong>中文自然語音</strong>
+                <small>翻到解釋時自動播放，並記住這個選擇</small>
+              </span>
+              <b>{mandarinAutoplay ? '開' : '關'}</b>
+            </button>
+          </div>
+        )}
         {cardMode === 'flashcard' && autoPlay && activeWord && (
           <div className="autoplay-timeline" aria-label={`這張字卡停留 ${cardDuration} 秒`}>
             <span key={`${activeWord.id}-${cardDuration}`} style={{ animationDuration: `${cardDuration}s` }} />
@@ -1212,8 +1346,38 @@ function StudyApp({
                 </div>
                 <div className="detail-block meaning-block">
                   <span>中文意思</span>
-                  <h2>{activeWord.meaning}</h2>
+                  <h2>{activeMeaningSections?.primary ?? activeWord.meaning}</h2>
+                  <button
+                    className={`mandarin-pronounce-button status-${mandarinStatus}`}
+                    onClick={(event) => {
+                      event.stopPropagation()
+                      unlockAudio()
+                      speakMandarin(activeMeaningSections?.primary ?? activeWord.meaning)
+                    }}
+                    type="button"
+                  >
+                    <Volume2 size={16} aria-hidden="true" />
+                    <span aria-live="polite">{mandarinLabel}</span>
+                  </button>
                 </div>
+                {activeMeaningSections?.synonyms.length ? (
+                  <div className="detail-block synonym-block">
+                    <span>同義字</span>
+                    <p>{activeMeaningSections.synonyms.join('；')}</p>
+                  </div>
+                ) : null}
+                {activeMeaningSections?.antonyms.length ? (
+                  <div className="detail-block antonym-block">
+                    <span>反義字</span>
+                    <p>{activeMeaningSections.antonyms.join('；')}</p>
+                  </div>
+                ) : null}
+                {activeMeaningSections?.memoryNotes.length ? (
+                  <div className="detail-block memory-note-block">
+                    <span>記憶提示</span>
+                    <p>{activeMeaningSections.memoryNotes.join('；')}</p>
+                  </div>
+                ) : null}
                 {activeWord.definition && (
                   <div className="detail-block">
                     <span>ENGLISH</span>

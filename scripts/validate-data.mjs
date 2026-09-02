@@ -4,6 +4,16 @@ function assert(condition, message) {
   if (!condition) throw new Error(message);
 }
 
+function taggedSections(value, label) {
+  const tagPattern = new RegExp(
+    `\\[${label}\\]\\s*([\\s\\S]*?)(?=\\s*(?:\\|\\s*)?\\[(?:義|類|反|記|例|英)\\]\\s*|$)`,
+    "g",
+  );
+  return [...String(value ?? "").matchAll(tagPattern)].map((match) =>
+    match[1].replace(/\s+/g, " ").trim(),
+  );
+}
+
 const decks = [
   { file: "../data/vocabulary-1000.json", deckId: "words1000", totalWords: 1085 },
   { file: "../data/vocabulary.json", deckId: "words2000", totalWords: 2078 },
@@ -18,6 +28,18 @@ for (const expected of decks) {
   assert(new Set(data.words.map((word) => word.id)).size === expected.totalWords, `${label}: word IDs are not unique`);
   assert(data.words.every((word) => word.word && word.meaning && word.root && word.part), `${label}: a required card field is blank`);
   assert(data.parts.length === 5, `${label}: expected five parts`);
+
+  const synonymWords = data.words.filter((word) => taggedSections(word.raw, "類").length > 0);
+  let synonymSectionCount = 0;
+  for (const word of synonymWords) {
+    const sourceSynonyms = taggedSections(word.raw, "類");
+    const exportedSynonyms = taggedSections(word.meaning, "類");
+    synonymSectionCount += sourceSynonyms.length;
+    assert(
+      JSON.stringify(exportedSynonyms) === JSON.stringify(sourceSynonyms),
+      `${label}: synonyms were not preserved for #${word.sourceNo} ${word.word}`,
+    );
+  }
 
   const partChecks = data.parts.map((part) => {
     const words = data.words.filter((word) => word.part === part.id);
@@ -47,7 +69,14 @@ for (const expected of decks) {
   assert(splitRoots.length === 0, `${label}: ${splitRoots.length} root families were split`);
   const totals = partChecks.map((part) => part.words);
   assert(Math.max(...totals) - Math.min(...totals) <= 1, `${label}: part totals differ by more than one card`);
-  results.push({ deck: label, totalWords: data.words.length, rootGroups: data.rootGroups.length, partChecks });
+  results.push({
+    deck: label,
+    totalWords: data.words.length,
+    rootGroups: data.rootGroups.length,
+    synonymWords: synonymWords.length,
+    synonymSections: synonymSectionCount,
+    partChecks,
+  });
 }
 
 console.log(JSON.stringify({ valid: true, decks: results }, null, 2));
