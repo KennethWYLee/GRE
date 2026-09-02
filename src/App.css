@@ -158,8 +158,12 @@
 .pronounce-button:hover, .pronounce-button:focus-visible, .pronounce-button.status-recording { background: var(--green); color: var(--card); outline: none; }
 .pronounce-button.status-device { border-color: var(--muted); color: var(--muted); }
 .mandarin-pronounce-button { display: inline-flex; min-height: 38px; align-items: center; gap: 7px; margin-top: 14px; padding: 0 13px; border: 1px solid var(--line-dark); background: transparent; color: var(--ink-soft); cursor: pointer; font-size: .68rem; font-weight: 800; }
-.mandarin-pronounce-button:hover, .mandarin-pronounce-button:focus-visible, .mandarin-pronounce-button.status-speaking { border-color: var(--green); background: var(--green); color: var(--card); outline: none; }
+.mandarin-pronounce-button:hover, .mandarin-pronounce-button:focus-visible, .mandarin-pronounce-button.status-moe { border-color: var(--green); background: var(--green); color: var(--card); outline: none; }
+.mandarin-pronounce-button.status-loading { border-color: var(--green); color: var(--green); }
+.mandarin-pronounce-button.status-device { border-color: var(--muted); color: var(--muted); }
 .mandarin-pronounce-button.status-unavailable { border-color: var(--muted); color: var(--muted); }
+.mandarin-source-note { max-width: 36rem; margin: 10px 0 0; color: var(--muted); font-size: .62rem; line-height: 1.55; }
+.mandarin-source-note a { color: inherit; font-weight: 800; text-underline-offset: 2px; }
 .pronounce-spinner { animation: spin 900ms linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
 .flip-hint { display: flex; align-items: center; justify-content: center; gap: 6px; margin: 0; color: var(--muted); font-size: .73rem; text-align: center; }

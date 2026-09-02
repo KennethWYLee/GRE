@@ -1,0 +1,359 @@
+{
+  "title": "中華民國教育部《國語辭典簡編本》",
+  "sourceVersion": "2014_20260626",
+  "sourcePage": "https://language.moe.gov.tw/001/Upload/Files/site_content/M0001/respub/dict_concised_download.html",
+  "usageNotice": "/audio/moe/conciseddict_10312.pdf",
+  "license": "CC BY-ND 3.0 TW",
+  "note": "詞目全文聲音檔；原始 WAV 未修改。",
+  "recordingCount": 58,
+  "recordings": {
+    "些許": {
+      "entryId": "391300001",
+      "url": "/audio/moe/391300001.wav",
+      "bytes": 447236,
+      "sha256": "4d98df3c92f05e89c060004bbe39aa4b3c45f4f2edc3488912d8a811f84b44ce"
+    },
+    "儘管": {
+      "entryId": "333700002",
+      "url": "/audio/moe/333700002.wav",
+      "bytes": 1032652,
+      "sha256": "f7a82b3088219c1da6ff13adbbf2dc40145a9e9a4614a7e241228c16aab2faf8"
+    },
+    "光合作用": {
+      "entryId": "246100022",
+      "url": "/audio/moe/246100022.wav",
+      "bytes": 1137296,
+      "sha256": "762459fed3d3f37deccc3d536edd1bf7ad9db00b726f81c97f76a35f5269845f"
+    },
+    "分裂": {
+      "entryId": "087300027",
+      "url": "/audio/moe/087300027.wav",
+      "bytes": 907632,
+      "sha256": "78c48125a0001eb452b93ea2772914c2a2d4458e9820b8002def475cde41217f"
+    },
+    "削弱": {
+      "entryId": "4155000041",
+      "url": "/audio/moe/4155000041.wav",
+      "bytes": 496256,
+      "sha256": "53002e5c302323b709e8cc4d7914af559931beca1604255c40f3bed77316ceee"
+    },
+    "加冕": {
+      "entryId": "310700007",
+      "url": "/audio/moe/310700007.wav",
+      "bytes": 1223412,
+      "sha256": "cc62da686f068ecce6c193a58eab1586f5beb4488241fcbceb433d8bd5ea01d2"
+    },
+    "勢利": {
+      "entryId": "493700004",
+      "url": "/audio/moe/493700004.wav",
+      "bytes": 737674,
+      "sha256": "12cf245cdaf94f7f237fc38b4539bf20add9358dfc255a2c25eac89771a345f1"
+    },
+    "半島": {
+      "entryId": "012400004",
+      "url": "/audio/moe/012400004.wav",
+      "bytes": 561196,
+      "sha256": "ac18a5053e9f158ea8ffa71ca31e8b05826a209fbaf36a74e5df085cbeaefcb7"
+    },
+    "危及": {
+      "entryId": "630700005",
+      "url": "/audio/moe/630700005.wav",
+      "bytes": 512076,
+      "sha256": "f5d9230a42abceadb97bae33fad15ce58c46fc695e5734658447da14d903e0be"
+    },
+    "同理": {
+      "entryId": "156000024",
+      "url": "/audio/moe/156000024.wav",
+      "bytes": 338676,
+      "sha256": "2d18f28cc43b8a112a4632efcb0b4b9de477564f7eca16d01b4a4d6bc8ff0b49"
+    },
+    "呼吸": {
+      "entryId": "280300011",
+      "url": "/audio/moe/280300011.wav",
+      "bytes": 1498314,
+      "sha256": "de98d282d9794d9e91c42b8d2b36d8e72d7aeda057553ff95842c0d6af0b37fb"
+    },
+    "嘉年華會": {
+      "entryId": "311700003",
+      "url": "/audio/moe/311700003.wav",
+      "bytes": 1402054,
+      "sha256": "bf9e9f38db72deb9bf01655a8b2cef77c1c3747c52715a77ca767dee06037a59"
+    },
+    "增加": {
+      "entryId": "536900011",
+      "url": "/audio/moe/536900011.wav",
+      "bytes": 579936,
+      "sha256": "16dfe1142db84008b8a8a4080cd740bd7a11e533ee57456b6c917257082a1f69"
+    },
+    "嬰兒": {
+      "entryId": "619100002",
+      "url": "/audio/moe/619100002.wav",
+      "bytes": 465376,
+      "sha256": "62153b39332516faeffa0885dbb15d997a58171108c1d68a734ca3d4ad356ac7"
+    },
+    "學究": {
+      "entryId": "415000023",
+      "url": "/audio/moe/415000023.wav",
+      "bytes": 812994,
+      "sha256": "7618dc12ac0e71327f3c943859b90f77f42edb5c01d21b404d8751bf22a1af41"
+    },
+    "尊敬": {
+      "entryId": "540500002",
+      "url": "/audio/moe/540500002.wav",
+      "bytes": 472796,
+      "sha256": "2024cf406c4c9c2538c95a8402cc17224e5223091100e113407a360e3b1564a1"
+    },
+    "引誘": {
+      "entryId": "615000036",
+      "url": "/audio/moe/615000036.wav",
+      "bytes": 666036,
+      "sha256": "57271e06801c3e5bb65fe17ca26b64e1e6f8e0887d48644f6de431019377c0f9"
+    },
+    "心電圖": {
+      "entryId": "404200017",
+      "url": "/audio/moe/404200017.wav",
+      "bytes": 1224954,
+      "sha256": "14d60904f52d1679738e88f4394e551ccf88372a5d3ce096db7824246b4c0d59"
+    },
+    "抱怨": {
+      "entryId": "010400011",
+      "url": "/audio/moe/010400011.wav",
+      "bytes": 505016,
+      "sha256": "d3fc39a2cde55c11a6ddd8e4fd8aa3cb27ad7cd1524cc5efa4a184fd9c5a288e"
+    },
+    "拋棄": {
+      "entryId": "034500004",
+      "url": "/audio/moe/034500004.wav",
+      "bytes": 857692,
+      "sha256": "a9e1ccb9a5bb4e11b4797d99d59655bc82a942370506fe24e4ab13abbf0c39fa"
+    },
+    "拔擢": {
+      "entryId": "001200009",
+      "url": "/audio/moe/001200009.wav",
+      "bytes": 427216,
+      "sha256": "3cfeff3bf33e82edf3e75d25d5e6b61ea3d5749471cb88adb26a6dceaf061329"
+    },
+    "推斷": {
+      "entryId": "153800006",
+      "url": "/audio/moe/153800006.wav",
+      "bytes": 511496,
+      "sha256": "946ff35c5f7c545b14fc294f480239e17cd33cadb4815ac6cb06fd5103398ad0"
+    },
+    "敏銳": {
+      "entryId": "076400004",
+      "url": "/audio/moe/076400004.wav",
+      "bytes": 655696,
+      "sha256": "d9ddb8af0fa366cee4d00ca6d9730ad4a04d452ccb53b9fa05d89f87b4b82e60"
+    },
+    "救護車": {
+      "entryId": "325100007",
+      "url": "/audio/moe/325100007.wav",
+      "bytes": 992134,
+      "sha256": "467d72d0e5725bfe1a1abf16f91ccce374d26ff0720ae2e79be4354e8bc0ff5f"
+    },
+    "新星": {
+      "entryId": "404900033",
+      "url": "/audio/moe/404900033.wav",
+      "bytes": 512176,
+      "sha256": "af1de9db91f7812c19ff9c635b516d37ca3aabcf758c7e630e9e23a91c90cbd8"
+    },
+    "最後通牒": {
+      "entryId": "539900005",
+      "url": "/audio/moe/539900005.wav",
+      "bytes": 1267494,
+      "sha256": "db316817eafcbca30a2e1c9a89198e32310f9d3ef984ca9d5266e77b9c2d1490"
+    },
+    "松樹": {
+      "entryId": "569700008",
+      "url": "/audio/moe/569700008.wav",
+      "bytes": 319596,
+      "sha256": "e0e3a710f5e1432fb5719956723c003e74c50a365302bf3cbf648e6c8e50b0bb"
+    },
+    "植物園": {
+      "entryId": "423500008",
+      "url": "/audio/moe/423500008.wav",
+      "bytes": 780896,
+      "sha256": "059dc9aa8e666a656a870419246459c5baaba1201f19af87c6f49a744ec7d380"
+    },
+    "殺蟲劑": {
+      "entryId": "495400012",
+      "url": "/audio/moe/495400012.wav",
+      "bytes": 547756,
+      "sha256": "0a46a48d90284f59d2b0437610a1537bfc766b7b92e096765378ce17b2ba09ff"
+    },
+    "沉著": {
+      "entryId": "473500017",
+      "url": "/audio/moe/473500017.wav",
+      "bytes": 514436,
+      "sha256": "097d0b3c3d73d187a113c43e46fdfdfa4747c9f7d167e951839ab4ac8054a940"
+    },
+    "熔岩": {
+      "entryId": "526300004",
+      "url": "/audio/moe/526300004.wav",
+      "bytes": 1455694,
+      "sha256": "cd6dfc5d4761f2c6a1448b1ee275a1318511df2cc2a93e9409e539ae1cf5b394"
+    },
+    "特權": {
+      "entryId": "133900039",
+      "url": "/audio/moe/133900039.wav",
+      "bytes": 624936,
+      "sha256": "0f5890f215104cf6632802d4ce8226417dcedfa3b3c7cda66300e4b467cb26d8"
+    },
+    "生病": {
+      "entryId": "508600002",
+      "url": "/audio/moe/508600002.wav",
+      "bytes": 529256,
+      "sha256": "a7dff4d082e9b4aaf4ed27a4a3163dc60d7a863e351d1e4b8a758eff876f82be"
+    },
+    "痛恨": {
+      "entryId": "157700012",
+      "url": "/audio/moe/157700012.wav",
+      "bytes": 470916,
+      "sha256": "ce3fb6eafbfc19ecf7ee7540020f6e4d9a76c277eb9e93c676d66a14830d83d0"
+    },
+    "石油": {
+      "entryId": "490000029",
+      "url": "/audio/moe/490000029.wav",
+      "bytes": 1282632,
+      "sha256": "b0a4a2d996532455462176eafb2b9209b33c39c721f6d359496f8ee3e2a270b7"
+    },
+    "禁止": {
+      "entryId": "334500009",
+      "url": "/audio/moe/334500009.wav",
+      "bytes": 520616,
+      "sha256": "ae77db46ea6fee339976969675bee14161a11fce8cca35cf560e8daf2e7fc27c"
+    },
+    "禮讓": {
+      "entryId": "188600022",
+      "url": "/audio/moe/188600022.wav",
+      "bytes": 517856,
+      "sha256": "bc8bb25107c808ea76c40d012d817d38c7462c9b6ac27f77f18d1b976404e1c2"
+    },
+    "精明": {
+      "entryId": "337700008",
+      "url": "/audio/moe/337700008.wav",
+      "bytes": 489616,
+      "sha256": "c16ae7086819820f13b1c4f393580787d21581e80bb88186bb1ccf84dab22985"
+    },
+    "縮寫": {
+      "entryId": "566400004",
+      "url": "/audio/moe/566400004.wav",
+      "bytes": 1158134,
+      "sha256": "5ba6d7eff663ced5a897cd61232989f0f7ce06778ca581535f497a7ba6e75e57"
+    },
+    "聳肩": {
+      "entryId": "570400003",
+      "url": "/audio/moe/570400003.wav",
+      "bytes": 745156,
+      "sha256": "94f6bcc0c0c9b2bd528e3c7011b9be16a5fb8b3e88a927a4b1b317b2a4a0b1dc"
+    },
+    "胰島素": {
+      "entryId": "585600001",
+      "url": "/audio/moe/585600001.wav",
+      "bytes": 1216392,
+      "sha256": "5d5d78550f3c94e5e0571d97b9d280cbe13a1f1b09714e5d15728b152af6d9d6"
+    },
+    "膠囊": {
+      "entryId": "320100004",
+      "url": "/audio/moe/320100004.wav",
+      "bytes": 1039714,
+      "sha256": "ad181f0fbd53c440e906c210e7777f1d9e0b4c6f6f3b7a22513c3a4f4cc6d2e2"
+    },
+    "艦隊": {
+      "entryId": "330500001",
+      "url": "/audio/moe/330500001.wav",
+      "bytes": 1557052,
+      "sha256": "367f8f3b8c2a21d77ee0f6fc8c7389bfdc5f5a5ea4512b5778302f30a96111a8"
+    },
+    "葉子": {
+      "entryId": "598500004",
+      "url": "/audio/moe/598500004.wav",
+      "bytes": 651056,
+      "sha256": "9b590c3b54b19e53f63767f15ba232e866c2ac3323f965cf212b191f1fe682bf"
+    },
+    "虔誠": {
+      "entryId": "366600002",
+      "url": "/audio/moe/366600002.wav",
+      "bytes": 566396,
+      "sha256": "8f47a9d68ee601ac28c2b482cb8f9374f50f720b795bdc0e4134ac869f035755"
+    },
+    "虛偽": {
+      "entryId": "411700030",
+      "url": "/audio/moe/411700030.wav",
+      "bytes": 555376,
+      "sha256": "13331ee0b7e7ceb329bf9ce5d59813cf1d2239402cbed299ed0361b36d391896"
+    },
+    "虛張聲勢": {
+      "entryId": "411700017",
+      "url": "/audio/moe/411700017.wav",
+      "bytes": 819416,
+      "sha256": "93679ee79626444783ef2b9b37da163bb2e107c9f27e1d93aea9d3fd321fb0d3"
+    },
+    "證實": {
+      "entryId": "449200010",
+      "url": "/audio/moe/449200010.wav",
+      "bytes": 467776,
+      "sha256": "8258ac4dbfb1e9cd1307294bc8494c9e810fb83faa610a4d6926be1bf30115d3"
+    },
+    "貴族": {
+      "entryId": "242700012",
+      "url": "/audio/moe/242700012.wav",
+      "bytes": 1515090,
+      "sha256": "0253e8607db2cc6bd13fabb957971717c46bba67467fefd8ceac1fe9f17502bc"
+    },
+    "贖回": {
+      "entryId": "512100002",
+      "url": "/audio/moe/512100002.wav",
+      "bytes": 621116,
+      "sha256": "ac69fa043400449a265548d42ea4d5d93b63cf7b8be54f36c94d529716a4fb04"
+    },
+    "赤道": {
+      "entryId": "464700003",
+      "url": "/audio/moe/464700003.wav",
+      "bytes": 867314,
+      "sha256": "6a3d728d932ce746c4d6962b92d9d2aaa40c86ba45116c78c78729e3dee00747"
+    },
+    "逃避": {
+      "entryId": "136400001",
+      "url": "/audio/moe/136400001.wav",
+      "bytes": 639796,
+      "sha256": "2c5fd6f1e0fbe4dfd5c7c2cfa78655d260ea1eb41da1e615421b7799494be30c"
+    },
+    "門牙": {
+      "entryId": "066000032",
+      "url": "/audio/moe/066000032.wav",
+      "bytes": 820394,
+      "sha256": "3c8e92c866030eefd30c5b23c02cef771c4b621b2658519b5a6567c7da0711fe"
+    },
+    "限制": {
+      "entryId": "403200008",
+      "url": "/audio/moe/403200008.wav",
+      "bytes": 1217132,
+      "sha256": "15d807b77c12d5800df983b65aaaa83ddfa4d27c792bdc52707b44fd9bfb66bd"
+    },
+    "隱喻": {
+      "entryId": "615300026",
+      "url": "/audio/moe/615300026.wav",
+      "bytes": 1486450,
+      "sha256": "a61501db2e19457d5ab0664b2ebc2cab00c3d0255a70e57c04272a9bd7758688"
+    },
+    "雜亂無章": {
+      "entryId": "530800007",
+      "url": "/audio/moe/530800007.wav",
+      "bytes": 783676,
+      "sha256": "7714758c427071ddb9378103ffb73b763aa282902e0b1c7ba8a39d6969831299"
+    },
+    "預言": {
+      "entryId": "651100032",
+      "url": "/audio/moe/651100032.wav",
+      "bytes": 742476,
+      "sha256": "e6f8f08aacdc53b0d2c50446215b450a705c63827684410d7024dbf0dc47e5ee"
+    },
+    "驅逐": {
+      "entryId": "375500004",
+      "url": "/audio/moe/375500004.wav",
+      "bytes": 649576,
+      "sha256": "841d4f4110bd57d09ef97813eb66795a4db3284d392e161a47097d924e150c92"
+    }
+  }
+}

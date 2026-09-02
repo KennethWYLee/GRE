@@ -28,6 +28,7 @@ import {
 } from 'lucide-react'
 import { Button } from './components/ui/button'
 import { AccountAccess, type ApprovedSession } from './AccountAccess'
+import moeMandarinAudio from './moe-mandarin-audio.json'
 import {
   advanceQuiz,
   buildQuizOptions,
@@ -51,7 +52,7 @@ import './App.css'
 
 type StudyMode = 'all' | 'review' | 'known' | 'favorites'
 type PronunciationStatus = 'idle' | 'loading' | 'recording' | 'device' | 'unavailable'
-type MandarinStatus = 'idle' | 'speaking' | 'unavailable'
+type MandarinStatus = 'idle' | 'loading' | 'moe' | 'device' | 'unavailable'
 type SequenceMode = 'fixed' | 'random'
 type CardMode = 'flashcard' | 'quiz'
 type SyncStatus = 'idle' | 'loading' | 'synced' | 'offline'
@@ -98,9 +99,17 @@ const AUTOPLAY_SECONDS_KEY = 'gre-roots-autoplay-seconds-v1'
 const MANDARIN_AUTOPLAY_KEY = 'gre-roots-mandarin-autoplay-v1'
 const AUTOPLAY_OPTIONS = [3, 5, 8, 10, 15, 20, 30] as const
 const PRONUNCIATION_LOOKAHEAD = 20
+const MANDARIN_LOOKAHEAD = 10
 const PRONUNCIATION_LOOKUP_WAIT_MS = 240
 const RECORDING_START_WAIT_MS = 360
+const MANDARIN_RECORDING_START_WAIT_MS = 520
 const RECORDING_LOOKUP_TIMEOUT = Symbol('recording-lookup-timeout')
+const MOE_MANDARIN_RECORDINGS = moeMandarinAudio.recordings as Record<string, {
+  entryId: string
+  url: string
+  bytes: number
+  sha256: string
+}>
 const SILENT_AUDIO =
   'data:audio/wav;base64,UklGRiYAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQIAAACAgA=='
 
@@ -219,6 +228,7 @@ function StudyApp({
   const mandarinRequestRef = useRef(0)
   const pronunciationCacheRef = useRef(new Map<string, Promise<string | null>>())
   const pronunciationPreloadRef = useRef(new Map<string, HTMLAudioElement>())
+  const mandarinPreloadRef = useRef(new Map<string, HTMLAudioElement>())
 
   const unlockAudio = useCallback(() => {
     if (audioUnlockedRef.current) return
@@ -264,6 +274,25 @@ function StudyApp({
       }
     })
   }, [findRecording])
+
+  const preloadMandarinRecording = useCallback((meaning: string) => {
+    const recording = MOE_MANDARIN_RECORDINGS[meaning]
+    if (!recording || mandarinPreloadRef.current.has(meaning)) return
+
+    const audio = new Audio(recording.url)
+    audio.preload = 'auto'
+    audio.load()
+    mandarinPreloadRef.current.set(meaning, audio)
+
+    while (mandarinPreloadRef.current.size > MANDARIN_LOOKAHEAD * 2) {
+      const oldestMeaning = mandarinPreloadRef.current.keys().next().value
+      if (typeof oldestMeaning !== 'string') break
+      const oldestAudio = mandarinPreloadRef.current.get(oldestMeaning)
+      oldestAudio?.pause()
+      oldestAudio?.removeAttribute('src')
+      mandarinPreloadRef.current.delete(oldestMeaning)
+    }
+  }, [])
 
   const speakWithDevice = useCallback((word: string, requestId: number) => {
     if (!('speechSynthesis' in window)) {
@@ -361,16 +390,9 @@ function StudyApp({
     speakWithDevice(word, requestId)
   }, [findRecording, speakWithDevice])
 
-  const speakMandarin = useCallback((meaning: string) => {
-    const requestId = mandarinRequestRef.current + 1
-    mandarinRequestRef.current = requestId
-    pronunciationRequestRef.current += 1
-    audioRef.current?.pause()
-    setPronunciationStatus('idle')
-
-    const text = mandarinSpeechText(meaning)
-    if (!text || !('speechSynthesis' in window)) {
-      setMandarinStatus('unavailable')
+  const speakMandarinWithDevice = useCallback((text: string, requestId: number) => {
+    if (!('speechSynthesis' in window)) {
+      if (requestId === mandarinRequestRef.current) setMandarinStatus('unavailable')
       return
     }
 
@@ -382,7 +404,7 @@ function StudyApp({
     utterance.rate = 0.9
     utterance.pitch = 1
     utterance.onstart = () => {
-      if (requestId === mandarinRequestRef.current) setMandarinStatus('speaking')
+      if (requestId === mandarinRequestRef.current) setMandarinStatus('device')
     }
     utterance.onend = () => {
       if (requestId === mandarinRequestRef.current) setMandarinStatus('idle')
@@ -391,9 +413,69 @@ function StudyApp({
       if (requestId !== mandarinRequestRef.current || event.error === 'canceled') return
       setMandarinStatus('unavailable')
     }
-    setMandarinStatus('speaking')
+    if (requestId === mandarinRequestRef.current) setMandarinStatus('device')
     synth.speak(utterance)
   }, [])
+
+  const speakMandarin = useCallback(async (meaning: string) => {
+    const requestId = mandarinRequestRef.current + 1
+    mandarinRequestRef.current = requestId
+    pronunciationRequestRef.current += 1
+    if (audioRef.current) {
+      audioRef.current.pause()
+      audioRef.current.currentTime = 0
+    }
+    setPronunciationStatus('idle')
+    window.speechSynthesis?.cancel()
+
+    const text = mandarinSpeechText(meaning)
+    if (!text) {
+      setMandarinStatus('unavailable')
+      return
+    }
+
+    const recording = MOE_MANDARIN_RECORDINGS[meaning]
+    if (!recording) {
+      speakMandarinWithDevice(text, requestId)
+      return
+    }
+
+    setMandarinStatus('loading')
+    let startTimer: number | undefined
+    let fallbackUsed = false
+    try {
+      const preloadedAudio = mandarinPreloadRef.current.get(meaning)
+      const audio = preloadedAudio ?? new Audio(recording.url)
+      mandarinPreloadRef.current.delete(meaning)
+      audioRef.current = audio
+      const fallbackToDevice = () => {
+        if (fallbackUsed || requestId !== mandarinRequestRef.current) return
+        fallbackUsed = true
+        audio.pause()
+        speakMandarinWithDevice(text, requestId)
+      }
+      startTimer = window.setTimeout(fallbackToDevice, MANDARIN_RECORDING_START_WAIT_MS)
+      audio.onplay = () => {
+        window.clearTimeout(startTimer)
+        if (fallbackUsed) {
+          audio.pause()
+          return
+        }
+        if (requestId === mandarinRequestRef.current) setMandarinStatus('moe')
+      }
+      audio.onended = () => {
+        if (requestId === mandarinRequestRef.current) setMandarinStatus('idle')
+      }
+      audio.onerror = () => {
+        window.clearTimeout(startTimer)
+        fallbackToDevice()
+      }
+      await audio.play()
+    } catch {
+      if (startTimer !== undefined) window.clearTimeout(startTimer)
+      if (!fallbackUsed) speakMandarinWithDevice(text, requestId)
+    }
+  }, [speakMandarinWithDevice])
 
   const stopPronunciation = useCallback(() => {
     pronunciationRequestRef.current += 1
@@ -554,6 +636,16 @@ function StudyApp({
     )
     for (const word of upcomingWords) preloadRecording(word.word)
   }, [activeWord, cardIndex, preloadRecording, studyWords])
+
+  useEffect(() => {
+    if (!activeWord) return
+    if ('speechSynthesis' in window) window.speechSynthesis.getVoices()
+    if (activeMeaningSections?.primary) preloadMandarinRecording(activeMeaningSections.primary)
+    const upcomingWords = studyWords.slice(cardIndex + 1, cardIndex + 1 + MANDARIN_LOOKAHEAD)
+    for (const word of upcomingWords) {
+      preloadMandarinRecording(splitMeaningSections(word.meaning).primary)
+    }
+  }, [activeMeaningSections, activeWord, cardIndex, preloadMandarinRecording, studyWords])
 
   useEffect(() => stopPronunciation, [stopPronunciation])
 
@@ -857,6 +949,7 @@ function StudyApp({
     window.localStorage.setItem(MANDARIN_AUTOPLAY_KEY, nextValue ? 'on' : 'off')
     if (!nextValue) {
       mandarinRequestRef.current += 1
+      audioRef.current?.pause()
       window.speechSynthesis?.cancel()
       setMandarinStatus('idle')
     }
@@ -1072,10 +1165,15 @@ function StudyApp({
     pronunciationStatus === 'loading' ? '載入美式發音' :
     pronunciationStatus === 'unavailable' ? '重新播放發音' :
     '播放美式發音'
+  const activeMandarinRecording = activeMeaningSections
+    ? MOE_MANDARIN_RECORDINGS[activeMeaningSections.primary]
+    : undefined
   const mandarinLabel =
-    mandarinStatus === 'speaking' ? '正在播放中文語音' :
+    mandarinStatus === 'moe' ? '教育部真人詞條錄音' :
+    mandarinStatus === 'device' ? '裝置中文語音' :
+    mandarinStatus === 'loading' ? '載入教育部錄音' :
     mandarinStatus === 'unavailable' ? '此裝置無法播放中文語音' :
-    '播放中文語音'
+    activeMandarinRecording ? '播放教育部真人詞條錄音' : '播放裝置中文語音'
 
   return (
     <main className="app-shell study-shell">
@@ -1203,8 +1301,8 @@ function StudyApp({
             <button aria-pressed={mandarinAutoplay} onClick={toggleMandarinAutoplay} type="button">
               <Volume2 size={18} aria-hidden="true" />
               <span>
-                <strong>中文自然語音</strong>
-                <small>翻到解釋時自動播放，並記住這個選擇</small>
+                <strong>中文發音</strong>
+                <small>教育部真人詞條錄音優先，其餘使用裝置語音</small>
               </span>
               <b>{mandarinAutoplay ? '開' : '關'}</b>
             </button>
@@ -1356,9 +1454,20 @@ function StudyApp({
                     }}
                     type="button"
                   >
-                    <Volume2 size={16} aria-hidden="true" />
+                    {mandarinStatus === 'loading' ?
+                      <LoaderCircle className="pronounce-spinner" size={16} /> :
+                      <Volume2 size={16} aria-hidden="true" />}
                     <span aria-live="polite">{mandarinLabel}</span>
                   </button>
+                  {activeMandarinRecording ? (
+                    <p className="mandarin-source-note" onClick={(event) => event.stopPropagation()}>
+                      真人錄音來源：中華民國教育部《國語辭典簡編本》詞目全文聲音檔；原始錄音未修改。
+                      {' '}<a href={moeMandarinAudio.sourcePage} rel="noreferrer" target="_blank">資料來源</a>
+                      {' · '}<a href={moeMandarinAudio.usageNotice} rel="noreferrer" target="_blank">使用說明</a>
+                    </p>
+                  ) : (
+                    <p className="mandarin-source-note">這筆中文解釋沒有完全相同的教育部詞目，改用裝置中文語音。</p>
+                  )}
                 </div>
                 {activeMeaningSections?.synonyms.length ? (
                   <div className="detail-block synonym-block">
