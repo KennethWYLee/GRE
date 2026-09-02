@@ -29,6 +29,7 @@ import {
 import { Button } from './components/ui/button'
 import { AccountAccess, type ApprovedSession } from './AccountAccess'
 import moeMandarinAudio from './moe-mandarin-audio.json'
+import wikimediaEnglishAudio from './wikimedia-english-audio.json'
 import {
   advanceQuiz,
   buildQuizOptions,
@@ -51,7 +52,7 @@ import {
 import './App.css'
 
 type StudyMode = 'all' | 'review' | 'known' | 'favorites'
-type PronunciationStatus = 'idle' | 'loading' | 'recording' | 'device' | 'unavailable'
+type PronunciationStatus = 'idle' | 'loading' | 'human-us' | 'human-other' | 'ai' | 'unavailable'
 type MandarinStatus = 'idle' | 'loading' | 'moe' | 'device' | 'unavailable'
 type SequenceMode = 'fixed' | 'random'
 type CardMode = 'flashcard' | 'quiz'
@@ -100,10 +101,19 @@ const MANDARIN_AUTOPLAY_KEY = 'gre-roots-mandarin-autoplay-v1'
 const AUTOPLAY_OPTIONS = [3, 5, 8, 10, 15, 20, 30] as const
 const PRONUNCIATION_LOOKAHEAD = 20
 const MANDARIN_LOOKAHEAD = 10
-const PRONUNCIATION_LOOKUP_WAIT_MS = 240
-const RECORDING_START_WAIT_MS = 360
+const HUMAN_RECORDING_START_WAIT_MS = 2_500
 const MANDARIN_RECORDING_START_WAIT_MS = 520
-const RECORDING_LOOKUP_TIMEOUT = Symbol('recording-lookup-timeout')
+const WIKIMEDIA_ENGLISH_RECORDINGS = wikimediaEnglishAudio.recordings as Record<string, {
+  url: string
+  accent: 'en-US' | 'en'
+  accentLabel: string
+  filename: string
+  sourceUrl: string
+  artist: string
+  license: string
+  licenseUrl: string
+  note: string
+}>
 const MOE_MANDARIN_RECORDINGS = moeMandarinAudio.recordings as Record<string, {
   entryId: string
   url: string
@@ -226,7 +236,6 @@ function StudyApp({
   const audioUnlockedRef = useRef(false)
   const pronunciationRequestRef = useRef(0)
   const mandarinRequestRef = useRef(0)
-  const pronunciationCacheRef = useRef(new Map<string, Promise<string | null>>())
   const pronunciationPreloadRef = useRef(new Map<string, HTMLAudioElement>())
   const mandarinPreloadRef = useRef(new Map<string, HTMLAudioElement>())
 
@@ -239,41 +248,26 @@ function StudyApp({
       .catch(() => undefined)
   }, [])
 
-  const findRecording = useCallback((word: string) => {
-    const key = word.toLocaleLowerCase()
-    const cached = pronunciationCacheRef.current.get(key)
-    if (cached) return cached
-
-    const request = fetch(`/api/pronunciation?word=${encodeURIComponent(word)}`)
-      .then((response) => response.ok ? response.json() : null)
-      .then((payload) => typeof payload?.audio === 'string' ? payload.audio : null)
-      .catch(() => null)
-    pronunciationCacheRef.current.set(key, request)
-    return request
-  }, [])
-
   const preloadRecording = useCallback((word: string) => {
     const key = word.toLocaleLowerCase()
+    const recording = WIKIMEDIA_ENGLISH_RECORDINGS[key]
+    if (!recording) return
     if (pronunciationPreloadRef.current.has(key)) return
 
-    void findRecording(word).then((recording) => {
-      if (!recording || pronunciationPreloadRef.current.has(key)) return
+    const audio = new Audio(recording.url)
+    audio.preload = 'auto'
+    audio.load()
+    pronunciationPreloadRef.current.set(key, audio)
 
-      const audio = new Audio(recording)
-      audio.preload = 'auto'
-      audio.load()
-      pronunciationPreloadRef.current.set(key, audio)
-
-      while (pronunciationPreloadRef.current.size > PRONUNCIATION_LOOKAHEAD * 2) {
-        const oldestKey = pronunciationPreloadRef.current.keys().next().value
-        if (typeof oldestKey !== 'string') break
-        const oldestAudio = pronunciationPreloadRef.current.get(oldestKey)
-        oldestAudio?.pause()
-        oldestAudio?.removeAttribute('src')
-        pronunciationPreloadRef.current.delete(oldestKey)
-      }
-    })
-  }, [findRecording])
+    while (pronunciationPreloadRef.current.size > PRONUNCIATION_LOOKAHEAD * 2) {
+      const oldestKey = pronunciationPreloadRef.current.keys().next().value
+      if (typeof oldestKey !== 'string') break
+      const oldestAudio = pronunciationPreloadRef.current.get(oldestKey)
+      oldestAudio?.pause()
+      oldestAudio?.removeAttribute('src')
+      pronunciationPreloadRef.current.delete(oldestKey)
+    }
+  }, [])
 
   const preloadMandarinRecording = useCallback((meaning: string) => {
     const recording = MOE_MANDARIN_RECORDINGS[meaning]
@@ -312,13 +306,13 @@ function StudyApp({
     utterance.rate = 0.88
     utterance.pitch = 1
     utterance.onstart = () => {
-      if (requestId === pronunciationRequestRef.current) setPronunciationStatus('device')
+      if (requestId === pronunciationRequestRef.current) setPronunciationStatus('ai')
     }
     utterance.onerror = () => {
       if (requestId === pronunciationRequestRef.current) setPronunciationStatus('unavailable')
     }
     synth.speak(utterance)
-    if (requestId === pronunciationRequestRef.current) setPronunciationStatus('device')
+    if (requestId === pronunciationRequestRef.current) setPronunciationStatus('ai')
   }, [])
 
   const playPronunciation = useCallback(async (word: string) => {
@@ -334,45 +328,33 @@ function StudyApp({
     }
     window.speechSynthesis?.cancel()
 
-    const recording = await Promise.race([
-      findRecording(word),
-      new Promise<typeof RECORDING_LOOKUP_TIMEOUT>((resolve) => {
-        window.setTimeout(() => resolve(RECORDING_LOOKUP_TIMEOUT), PRONUNCIATION_LOOKUP_WAIT_MS)
-      }),
-    ])
-    if (requestId !== pronunciationRequestRef.current) return
-
-    if (recording === RECORDING_LOOKUP_TIMEOUT) {
-      speakWithDevice(word, requestId)
-      return
-    }
+    const key = word.toLocaleLowerCase()
+    const recording = WIKIMEDIA_ENGLISH_RECORDINGS[key]
 
     if (recording) {
       let startTimer: number | undefined
       let fallbackUsed = false
       try {
-        const key = word.toLocaleLowerCase()
         const preloadedAudio = pronunciationPreloadRef.current.get(key)
-        const audio = preloadedAudio ?? audioRef.current ?? new Audio()
+        const audio = preloadedAudio ?? new Audio(recording.url)
         pronunciationPreloadRef.current.delete(key)
         audioRef.current = audio
-        if (audio.src !== recording) audio.src = recording
-        audio.preload = 'auto'
-        audio.playbackRate = 0.96
         const fallbackToDevice = () => {
           if (fallbackUsed || requestId !== pronunciationRequestRef.current) return
           fallbackUsed = true
           audio.pause()
           speakWithDevice(word, requestId)
         }
-        startTimer = window.setTimeout(fallbackToDevice, RECORDING_START_WAIT_MS)
+        startTimer = window.setTimeout(fallbackToDevice, HUMAN_RECORDING_START_WAIT_MS)
         audio.onplay = () => {
           window.clearTimeout(startTimer)
           if (fallbackUsed) {
             audio.pause()
             return
           }
-          if (requestId === pronunciationRequestRef.current) setPronunciationStatus('recording')
+          if (requestId === pronunciationRequestRef.current) {
+            setPronunciationStatus(recording.accent === 'en-US' ? 'human-us' : 'human-other')
+          }
         }
         audio.onerror = () => {
           window.clearTimeout(startTimer)
@@ -388,7 +370,7 @@ function StudyApp({
     }
 
     speakWithDevice(word, requestId)
-  }, [findRecording, speakWithDevice])
+  }, [speakWithDevice])
 
   const speakMandarinWithDevice = useCallback((text: string, requestId: number) => {
     if (!('speechSynthesis' in window)) {
@@ -607,14 +589,6 @@ function StudyApp({
   )
 
   useEffect(() => {
-    if (!data) return
-    for (const part of data.parts) {
-      const firstWord = data.words.find((word) => word.part === part.id)
-      if (firstWord) void findRecording(firstWord.word)
-    }
-  }, [data, findRecording])
-
-  useEffect(() => {
     if (!activeWord) return
     const timeout = window.setTimeout(() => {
       void playPronunciation(activeWord.word)
@@ -630,6 +604,7 @@ function StudyApp({
 
   useEffect(() => {
     if (!activeWord) return
+    preloadRecording(activeWord.word)
     const upcomingWords = studyWords.slice(
       cardIndex + 1,
       cardIndex + 1 + PRONUNCIATION_LOOKAHEAD,
@@ -1159,12 +1134,18 @@ function StudyApp({
   const partRemaining = partTotal - partKnown
   const partKnownPercent = partTotal ? Math.round((partKnown / partTotal) * 100) : 0
   const currentRecall = activeWord ? memory.recall[activeWord.id] : undefined
+  const activeEnglishRecording = activeWord
+    ? WIKIMEDIA_ENGLISH_RECORDINGS[activeWord.word.toLocaleLowerCase()]
+    : undefined
   const pronunciationLabel =
-    pronunciationStatus === 'recording' ? '美式真人發音' :
-    pronunciationStatus === 'device' ? '美式裝置發音' :
-    pronunciationStatus === 'loading' ? '載入美式發音' :
+    pronunciationStatus === 'human-us' ? '美式真人發音' :
+    pronunciationStatus === 'human-other' ? `${activeEnglishRecording?.accentLabel ?? '英語'}真人發音` :
+    pronunciationStatus === 'ai' ? 'AI／裝置合成發音' :
+    pronunciationStatus === 'loading' ? '載入真人發音' :
     pronunciationStatus === 'unavailable' ? '重新播放發音' :
-    '播放美式發音'
+    activeEnglishRecording
+      ? `播放${activeEnglishRecording.accent === 'en-US' ? '美式' : activeEnglishRecording.accentLabel}真人發音`
+      : '播放 AI／裝置合成發音'
   const activeMandarinRecording = activeMeaningSections
     ? MOE_MANDARIN_RECORDINGS[activeMeaningSections.primary]
     : undefined
@@ -1349,6 +1330,15 @@ function StudyApp({
                   {pronunciationStatus === 'loading' ? <LoaderCircle className="pronounce-spinner" size={17} /> : <Volume2 size={17} />}
                   再聽一次發音
                 </button>
+                {activeEnglishRecording ? (
+                  <p className="english-source-note">
+                    真人錄音：{activeEnglishRecording.artist} · {activeEnglishRecording.accentLabel} ·{' '}
+                    <a href={activeEnglishRecording.sourceUrl} rel="noreferrer" target="_blank">來源</a>
+                    {' · '}<a href={activeEnglishRecording.licenseUrl} rel="noreferrer" target="_blank">{activeEnglishRecording.license}</a>
+                  </p>
+                ) : (
+                  <p className="english-source-note">未找到授權清楚的真人錄音，使用 AI／裝置合成語音。</p>
+                )}
               </div>
             ) : (
               <div className="quiz-prompt">
@@ -1419,7 +1409,7 @@ function StudyApp({
                   <h2>{activeWord.word}</h2>
                   {activeWord.pronunciation && <p>/{activeWord.pronunciation}/</p>}
                   <button
-                    aria-label={`重播 ${activeWord.word} 的美式發音`}
+                    aria-label={`重播 ${activeWord.word} 的${activeEnglishRecording ? '真人' : 'AI／裝置合成'}發音`}
                     className={`pronounce-button status-${pronunciationStatus}`}
                     onClick={(event) => {
                       event.stopPropagation()
@@ -1433,6 +1423,15 @@ function StudyApp({
                       <Volume2 size={17} />}
                     <span aria-live="polite">{pronunciationLabel}</span>
                   </button>
+                  {activeEnglishRecording ? (
+                    <p className="english-source-note" onClick={(event) => event.stopPropagation()}>
+                      真人錄音：{activeEnglishRecording.artist} · {activeEnglishRecording.accentLabel} ·{' '}
+                      <a href={activeEnglishRecording.sourceUrl} rel="noreferrer" target="_blank">來源</a>
+                      {' · '}<a href={activeEnglishRecording.licenseUrl} rel="noreferrer" target="_blank">{activeEnglishRecording.license}</a>
+                    </p>
+                  ) : (
+                    <p className="english-source-note">未找到授權清楚的真人錄音，使用 AI／裝置合成語音。</p>
+                  )}
                 </div>
                 <p className="flip-hint"><RotateCcw size={14} /> 輕觸翻面 · 左右滑動換字</p>
               </div>
