@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import { runAutoplayCard } from '../src/autoplay.ts'
 import {
   advanceQuiz,
   buildQuizOptions,
@@ -87,6 +88,54 @@ assert.deepEqual(wrongAdvance, { queue: ['word-1', 'word-2', 'word-1'], nextInde
 const finalAdvance = advanceQuiz(['word-1', 'word-2'], 1, 'word-2', true)
 assert.equal(finalAdvance.complete, true)
 
+let autoplayClock = 0
+const autoplayEvents = []
+const autoplayAdvanced = await runAutoplayCard({
+  minimumDurationMs: 5_000,
+  isActive: () => true,
+  playEnglish: async () => { autoplayClock += 800; autoplayEvents.push('english-ended') },
+  showMeaning: () => autoplayEvents.push('meaning-shown'),
+  playMandarin: async () => { autoplayClock += 700; autoplayEvents.push('mandarin-ended') },
+  wait: async (milliseconds) => { autoplayClock += milliseconds; autoplayEvents.push(`wait-${milliseconds}`) },
+  now: () => autoplayClock,
+})
+assert.equal(autoplayAdvanced, true)
+assert.equal(autoplayClock, 5_000)
+assert.deepEqual(autoplayEvents, [
+  'english-ended',
+  'wait-1000',
+  'meaning-shown',
+  'mandarin-ended',
+  'wait-1000',
+  'wait-1500',
+])
+
+let delayedClock = 0
+const delayedAdvanced = await runAutoplayCard({
+  minimumDurationMs: 5_000,
+  isActive: () => true,
+  playEnglish: async () => { delayedClock += 3_000 },
+  showMeaning: () => undefined,
+  playMandarin: async () => { delayedClock += 2_500 },
+  wait: async (milliseconds) => { delayedClock += milliseconds },
+  now: () => delayedClock,
+})
+assert.equal(delayedAdvanced, true)
+assert.equal(delayedClock, 7_500)
+
+let active = true
+let meaningShownAfterCancel = false
+const canceledAdvance = await runAutoplayCard({
+  minimumDurationMs: 5_000,
+  isActive: () => active,
+  playEnglish: async () => { active = false },
+  showMeaning: () => { meaningShownAfterCancel = true },
+  wait: async () => undefined,
+  now: () => 0,
+})
+assert.equal(canceledAdvance, false)
+assert.equal(meaningShownAfterCancel, false)
+
 console.log(JSON.stringify({
   valid: true,
   spacedReview: true,
@@ -96,4 +145,7 @@ console.log(JSON.stringify({
   wrongAnswersReturnToQueue: true,
   concurrentDeviceMerge: true,
   legacyProgressMigration: true,
+  autoplayWaitsForSpeech: true,
+  autoplayMinimumDuration: true,
+  autoplayCancellation: true,
 }, null, 2))

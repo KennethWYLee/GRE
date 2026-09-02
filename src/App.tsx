@@ -29,6 +29,7 @@ import {
 import { Button } from './components/ui/button'
 import { AccountAccess, type ApprovedSession } from './AccountAccess'
 import { apiFetch } from './api-client'
+import { runAutoplayCard } from './autoplay'
 import moeMandarinAudio from './moe-mandarin-audio.json'
 import wikimediaEnglishAudio from './wikimedia-english-audio.json'
 import wikimediaMandarinAudio from './wikimedia-mandarin-audio.json'
@@ -72,6 +73,12 @@ type SaveProgressResponse = {
   ok?: boolean
   progress?: unknown
   revision: number
+}
+
+type PlaybackEntry = {
+  wordId: string
+  promise: Promise<boolean>
+  completed: boolean
 }
 
 type PartSummary = {
@@ -118,6 +125,8 @@ const AUTOPLAY_OPTIONS = [3, 5, 8, 10, 15, 20, 30] as const
 const PRONUNCIATION_LOOKAHEAD = 20
 const MANDARIN_LOOKAHEAD = 10
 const HUMAN_RECORDING_START_WAIT_MS = 2_500
+const SPEECH_COMPLETION_TIMEOUT_MS = 15_000
+const PAUSE_AFTER_SPEECH_MS = 1_000
 const WIKIMEDIA_ENGLISH_RECORDINGS = wikimediaEnglishAudio.recordings as Record<string, {
   url: string
   accent: 'en-US' | 'en'
@@ -299,6 +308,8 @@ function StudyApp({
   const syncRequestRef = useRef(0)
   const pronunciationPreloadRef = useRef(new Map<string, HTMLAudioElement>())
   const mandarinPreloadRef = useRef(new Map<string, HTMLAudioElement>())
+  const englishPlaybackRef = useRef<PlaybackEntry | null>(null)
+  const mandarinPlaybackRef = useRef<PlaybackEntry | null>(null)
 
   const unlockAudio = useCallback(() => {
     if (audioUnlockedRef.current) return
@@ -354,32 +365,53 @@ function StudyApp({
     }
   }, [])
 
-  const speakWithDevice = useCallback((word: string, requestId: number) => {
-    if (!('speechSynthesis' in window)) {
-      if (requestId === pronunciationRequestRef.current) setPronunciationStatus('unavailable')
-      return
-    }
+  const speakWithDevice = useCallback((word: string, requestId: number) => (
+    new Promise<boolean>((resolve) => {
+      if (!('speechSynthesis' in window)) {
+        if (requestId === pronunciationRequestRef.current) setPronunciationStatus('unavailable')
+        resolve(false)
+        return
+      }
 
-    const synth = window.speechSynthesis
-    synth.cancel()
-    const utterance = new SpeechSynthesisUtterance(word)
-    const voices = synth.getVoices().filter((voice) => voice.lang.toLocaleLowerCase().startsWith('en-us'))
-    utterance.voice =
-      voices.find((voice) => /samantha|ava|jenny|aria|joanna|natural|google us english/i.test(voice.name)) ??
-      voices[0] ??
-      null
-    utterance.lang = 'en-US'
-    utterance.rate = 0.88
-    utterance.pitch = 1
-    utterance.onstart = () => {
+      const synth = window.speechSynthesis
+      synth.cancel()
+      const utterance = new SpeechSynthesisUtterance(word)
+      const voices = synth.getVoices().filter((voice) => voice.lang.toLocaleLowerCase().startsWith('en-us'))
+      let settled = false
+      const finish = (played: boolean) => {
+        if (settled) return
+        settled = true
+        window.clearTimeout(completionTimer)
+        utterance.onstart = null
+        utterance.onend = null
+        utterance.onerror = null
+        resolve(played)
+      }
+      const completionTimer = window.setTimeout(() => {
+        synth.cancel()
+        finish(false)
+      }, SPEECH_COMPLETION_TIMEOUT_MS)
+      utterance.voice =
+        voices.find((voice) => /samantha|ava|jenny|aria|joanna|natural|google us english/i.test(voice.name)) ??
+        voices[0] ??
+        null
+      utterance.lang = 'en-US'
+      utterance.rate = 0.88
+      utterance.pitch = 1
+      utterance.onstart = () => {
+        if (requestId === pronunciationRequestRef.current) setPronunciationStatus('ai')
+      }
+      utterance.onend = () => finish(true)
+      utterance.onerror = (event) => {
+        if (requestId === pronunciationRequestRef.current && event.error !== 'canceled') {
+          setPronunciationStatus('unavailable')
+        }
+        finish(false)
+      }
+      synth.speak(utterance)
       if (requestId === pronunciationRequestRef.current) setPronunciationStatus('ai')
-    }
-    utterance.onerror = () => {
-      if (requestId === pronunciationRequestRef.current) setPronunciationStatus('unavailable')
-    }
-    synth.speak(utterance)
-    if (requestId === pronunciationRequestRef.current) setPronunciationStatus('ai')
-  }, [])
+    })
+  ), [])
 
   const playPronunciation = useCallback(async (word: string) => {
     const requestId = pronunciationRequestRef.current + 1
@@ -398,44 +430,49 @@ function StudyApp({
     const recording = WIKIMEDIA_ENGLISH_RECORDINGS[key]
 
     if (recording) {
-      let startTimer: number | undefined
-      let fallbackUsed = false
-      try {
+      const played = await new Promise<boolean>((resolve) => {
         const preloadedAudio = pronunciationPreloadRef.current.get(key)
         const audio = preloadedAudio ?? new Audio(recording.url)
         pronunciationPreloadRef.current.delete(key)
         audioRef.current = audio
-        const fallbackToDevice = () => {
-          if (fallbackUsed || requestId !== pronunciationRequestRef.current) return
-          fallbackUsed = true
-          audio.pause()
-          speakWithDevice(word, requestId)
+        let settled = false
+        const finish = (completed: boolean) => {
+          if (settled) return
+          settled = true
+          window.clearTimeout(startTimer)
+          window.clearTimeout(completionTimer)
+          audio.onplay = null
+          audio.onended = null
+          audio.onerror = null
+          audio.onpause = null
+          resolve(completed)
         }
-        startTimer = window.setTimeout(fallbackToDevice, HUMAN_RECORDING_START_WAIT_MS)
+        const startTimer = window.setTimeout(() => {
+          audio.pause()
+          finish(false)
+        }, HUMAN_RECORDING_START_WAIT_MS)
+        const completionTimer = window.setTimeout(() => {
+          audio.pause()
+          finish(false)
+        }, SPEECH_COMPLETION_TIMEOUT_MS)
         audio.onplay = () => {
           window.clearTimeout(startTimer)
-          if (fallbackUsed) {
-            audio.pause()
-            return
-          }
           if (requestId === pronunciationRequestRef.current) {
             setPronunciationStatus(recording.accent === 'en-US' ? 'human-us' : 'human-other')
           }
         }
-        audio.onerror = () => {
-          window.clearTimeout(startTimer)
-          fallbackToDevice()
+        audio.onended = () => finish(true)
+        audio.onerror = () => finish(false)
+        audio.onpause = () => {
+          if (!audio.ended) finish(false)
         }
-        await audio.play()
-        return
-      } catch {
-        if (startTimer !== undefined) window.clearTimeout(startTimer)
-        if (!fallbackUsed) speakWithDevice(word, requestId)
-        return
-      }
+        void audio.play().catch(() => finish(false))
+      })
+      if (requestId !== pronunciationRequestRef.current) return false
+      if (played) return true
     }
 
-    speakWithDevice(word, requestId)
+    return speakWithDevice(word, requestId)
   }, [speakWithDevice])
 
   const speakMandarinWithDevice = useCallback((text: string, requestId: number, status: MandarinStatus = 'ai') => (
@@ -448,6 +485,20 @@ function StudyApp({
 
       const synth = window.speechSynthesis
       const utterance = new SpeechSynthesisUtterance(text)
+      let settled = false
+      const finish = (played: boolean) => {
+        if (settled) return
+        settled = true
+        window.clearTimeout(completionTimer)
+        utterance.onstart = null
+        utterance.onend = null
+        utterance.onerror = null
+        resolve(played)
+      }
+      const completionTimer = window.setTimeout(() => {
+        synth.cancel()
+        finish(false)
+      }, SPEECH_COMPLETION_TIMEOUT_MS)
       utterance.lang = 'zh-TW'
       utterance.voice = selectMandarinVoice(synth.getVoices())
       utterance.rate = 0.9
@@ -455,12 +506,12 @@ function StudyApp({
       utterance.onstart = () => {
         if (requestId === mandarinRequestRef.current) setMandarinStatus(status)
       }
-      utterance.onend = () => resolve(true)
+      utterance.onend = () => finish(true)
       utterance.onerror = (event) => {
         if (requestId === mandarinRequestRef.current && event.error !== 'canceled') {
           setMandarinStatus('unavailable')
         }
-        resolve(false)
+        finish(false)
       }
       if (requestId === mandarinRequestRef.current) setMandarinStatus(status)
       synth.speak(utterance)
@@ -482,6 +533,7 @@ function StudyApp({
       if (settled) return
       settled = true
       window.clearTimeout(startTimer)
+      window.clearTimeout(completionTimer)
       audio.onplay = null
       audio.onended = null
       audio.onerror = null
@@ -492,6 +544,10 @@ function StudyApp({
       audio.pause()
       finish(false)
     }, HUMAN_RECORDING_START_WAIT_MS)
+    const completionTimer = window.setTimeout(() => {
+      audio.pause()
+      finish(false)
+    }, SPEECH_COMPLETION_TIMEOUT_MS)
     audio.onplay = () => {
       window.clearTimeout(startTimer)
       if (requestId !== mandarinRequestRef.current) {
@@ -523,7 +579,7 @@ function StudyApp({
     const text = mandarinSpeechText(meaning)
     if (!text) {
       setMandarinStatus('unavailable')
-      return
+      return false
     }
 
     const plan = mandarinPlaybackPlan(meaning)
@@ -535,14 +591,12 @@ function StudyApp({
         requestId,
         'human-moe',
       )
-      if (requestId !== mandarinRequestRef.current) return
-      if (!played) await speakMandarinWithDevice(text, requestId, 'ai')
-      return
+      if (requestId !== mandarinRequestRef.current) return false
+      return played || await speakMandarinWithDevice(text, requestId, 'ai')
     }
 
     if (!plan.humanRecordings.length) {
-      await speakMandarinWithDevice(text, requestId, 'ai')
-      return
+      return speakMandarinWithDevice(text, requestId, 'ai')
     }
 
     setMandarinStatus('loading')
@@ -550,7 +604,7 @@ function StudyApp({
     let aiPlayed = 0
     const plannedStatus: MandarinStatus = plan.aiSegmentCount ? 'mixed' : 'human-wikimedia'
     for (const segment of plan.segments) {
-      if (requestId !== mandarinRequestRef.current) return
+      if (requestId !== mandarinRequestRef.current) return false
       if (segment.recording) {
         const played = await playMandarinHumanRecording(
           `wikimedia:${segment.text}`,
@@ -563,16 +617,42 @@ function StudyApp({
           continue
         }
       }
-      if (requestId !== mandarinRequestRef.current) return
+      if (requestId !== mandarinRequestRef.current) return false
       if (await speakMandarinWithDevice(segment.text, requestId, 'mixed')) aiPlayed += 1
     }
-    if (requestId !== mandarinRequestRef.current) return
+    if (requestId !== mandarinRequestRef.current) return false
     setMandarinStatus(humanPlayed && aiPlayed ? 'mixed' : humanPlayed ? 'human-wikimedia' : 'ai')
+    return humanPlayed + aiPlayed > 0
   }, [playMandarinHumanRecording, speakMandarinWithDevice])
+
+  const startEnglishPlayback = useCallback((wordId: string, word: string) => {
+    mandarinPlaybackRef.current = null
+    const promise = playPronunciation(word)
+    const entry: PlaybackEntry = { wordId, promise, completed: false }
+    englishPlaybackRef.current = entry
+    void promise.then(
+      () => { entry.completed = true },
+      () => { entry.completed = true },
+    )
+    return entry
+  }, [playPronunciation])
+
+  const startMandarinPlayback = useCallback((wordId: string, meaning: string) => {
+    const promise = speakMandarin(meaning)
+    const entry: PlaybackEntry = { wordId, promise, completed: false }
+    mandarinPlaybackRef.current = entry
+    void promise.then(
+      () => { entry.completed = true },
+      () => { entry.completed = true },
+    )
+    return entry
+  }, [speakMandarin])
 
   const stopPronunciation = useCallback(() => {
     pronunciationRequestRef.current += 1
     mandarinRequestRef.current += 1
+    englishPlaybackRef.current = null
+    mandarinPlaybackRef.current = null
     audioRef.current?.pause()
     window.speechSynthesis?.cancel()
     setPronunciationStatus('idle')
@@ -725,16 +805,22 @@ function StudyApp({
   useEffect(() => {
     if (!activeWord) return
     const timeout = window.setTimeout(() => {
-      void playPronunciation(activeWord.word)
+      if (englishPlaybackRef.current?.wordId !== activeWord.id) {
+        startEnglishPlayback(activeWord.id, activeWord.word)
+      }
     }, 80)
     return () => window.clearTimeout(timeout)
-  }, [activeWord, playPronunciation])
+  }, [activeWord, startEnglishPlayback])
 
   useEffect(() => {
     if (!activeWord || !activeMeaningSections || !flipped || !mandarinAutoplay || cardMode !== 'flashcard') return
-    const timeout = window.setTimeout(() => speakMandarin(activeMeaningSections.primary), 80)
+    const timeout = window.setTimeout(() => {
+      if (!autoPlay || mandarinPlaybackRef.current?.wordId !== activeWord.id) {
+        startMandarinPlayback(activeWord.id, activeMeaningSections.primary)
+      }
+    }, 80)
     return () => window.clearTimeout(timeout)
-  }, [activeMeaningSections, activeWord, cardMode, flipped, mandarinAutoplay, speakMandarin])
+  }, [activeMeaningSections, activeWord, autoPlay, cardMode, flipped, mandarinAutoplay, startMandarinPlayback])
 
   useEffect(() => {
     if (!activeWord) return
@@ -760,11 +846,57 @@ function StudyApp({
 
   useEffect(() => {
     if (!autoPlay || !activeWord) return
+    let cancelled = false
+    const pendingWaits = new Set<{ timer: number; resolve: () => void }>()
+    const wait = (milliseconds: number) => new Promise<void>((resolve) => {
+      if (cancelled) {
+        resolve()
+        return
+      }
+      const pending = {
+        timer: 0,
+        resolve: () => {
+          pendingWaits.delete(pending)
+          resolve()
+        },
+      }
+      pending.timer = window.setTimeout(pending.resolve, milliseconds)
+      pendingWaits.add(pending)
+    })
+    const isActive = () => !cancelled
+    const awaitLatestPlayback = async (
+      playbackRef: { current: PlaybackEntry | null },
+      startPlayback: () => PlaybackEntry,
+    ) => {
+      let entry = playbackRef.current
+      if (!entry || entry.wordId !== activeWord.id || entry.completed) entry = startPlayback()
+      while (entry) {
+        await entry.promise
+        if (!isActive()) return
+        const latest = playbackRef.current
+        if (!latest || latest.wordId !== activeWord.id || latest.promise === entry.promise) return
+        entry = latest
+      }
+    }
 
-    const totalMilliseconds = cardDuration * 1000
-    const resetTimer = window.setTimeout(() => setFlipped(false), 0)
-    const flipTimer = window.setTimeout(() => setFlipped(true), totalMilliseconds / 2)
-    const nextTimer = window.setTimeout(() => {
+    void runAutoplayCard({
+      minimumDurationMs: cardDuration * 1000,
+      isActive,
+      playEnglish: () => awaitLatestPlayback(
+        englishPlaybackRef,
+        () => startEnglishPlayback(activeWord.id, activeWord.word),
+      ),
+      showMeaning: () => setFlipped(true),
+      playMandarin: mandarinAutoplay && activeMeaningSections?.primary
+        ? () => awaitLatestPlayback(
+            mandarinPlaybackRef,
+            () => startMandarinPlayback(activeWord.id, activeMeaningSections.primary),
+          )
+        : undefined,
+      wait,
+      pauseAfterSpeechMs: PAUSE_AFTER_SPEECH_MS,
+    }).then((shouldAdvance) => {
+      if (!shouldAdvance) return
       if (cardIndex >= studyWords.length - 1) {
         setAutoPlay(false)
         setFlipped(true)
@@ -777,14 +909,34 @@ function StudyApp({
       if (!dailyReview && !favoriteReview && cardMode === 'flashcard' && sequenceMode === 'fixed' && selectedPart !== null && studyMode === 'all' && rootFilter === 'all' && !query) {
         setMemory((current) => setPosition(current, String(selectedPart), nextIndex))
       }
-    }, totalMilliseconds)
+    })
 
     return () => {
-      window.clearTimeout(resetTimer)
-      window.clearTimeout(flipTimer)
-      window.clearTimeout(nextTimer)
+      cancelled = true
+      for (const pending of pendingWaits) {
+        window.clearTimeout(pending.timer)
+        pending.resolve()
+      }
     }
-  }, [activeWord, autoPlay, cardDuration, cardIndex, cardMode, dailyReview, favoriteReview, query, rootFilter, selectedPart, sequenceMode, studyMode, studyWords.length])
+  }, [
+    activeMeaningSections,
+    activeWord,
+    autoPlay,
+    cardDuration,
+    cardIndex,
+    cardMode,
+    dailyReview,
+    favoriteReview,
+    mandarinAutoplay,
+    query,
+    rootFilter,
+    selectedPart,
+    sequenceMode,
+    startEnglishPlayback,
+    startMandarinPlayback,
+    studyMode,
+    studyWords.length,
+  ])
 
   const rootsForPart = useMemo(
     () => data?.rootGroups.filter((group) => dailyReview || favoriteReview
@@ -1043,11 +1195,13 @@ function StudyApp({
 
   const toggleAutoPlay = () => {
     unlockAudio()
-    if (!autoPlay && activeWord) {
-      setFlipped(false)
-      void playPronunciation(activeWord.word)
+    stopPronunciation()
+    if (autoPlay) {
+      setAutoPlay(false)
+      return
     }
-    setAutoPlay((playing) => !playing)
+    if (activeWord) setFlipped(false)
+    setAutoPlay(true)
   }
 
   const toggleMandarinAutoplay = () => {
@@ -1400,12 +1554,12 @@ function StudyApp({
             {autoPlay ? <Pause size={18} /> : <Play size={18} />}
             <span>
               <strong>{autoPlay ? '暫停自動連播' : '開始自動連播'}</strong>
-              <small>先看單字，後半自動翻到解釋</small>
+              <small>英文、中文播完後各停 1 秒</small>
             </span>
           </button>
           <label className="duration-control">
             <Timer size={17} aria-hidden="true" />
-            <span>每字</span>
+            <span>每字至少</span>
             <select
               aria-label="選擇每個單字停留秒數"
               onChange={(event) => changeCardDuration(Number(event.target.value))}
@@ -1430,7 +1584,7 @@ function StudyApp({
           </div>
         )}
         {cardMode === 'flashcard' && autoPlay && activeWord && (
-          <div className="autoplay-timeline" aria-label={`這張字卡停留 ${cardDuration} 秒`}>
+          <div className="autoplay-timeline" aria-label={`這張字卡至少停留 ${cardDuration} 秒`}>
             <span key={`${activeWord.id}-${cardDuration}`} style={{ animationDuration: `${cardDuration}s` }} />
           </div>
         )}
@@ -1466,7 +1620,7 @@ function StudyApp({
             {quizKind === 'spelling' ? (
               <div className="quiz-prompt spelling-prompt">
                 <p>{activeWord.meaning}</p>
-                <button className={`pronounce-button status-${pronunciationStatus}`} onClick={() => void playPronunciation(activeWord.word)} type="button">
+                <button className={`pronounce-button status-${pronunciationStatus}`} onClick={() => startEnglishPlayback(activeWord.id, activeWord.word)} type="button">
                   {pronunciationStatus === 'loading' ? <LoaderCircle className="pronounce-spinner" size={17} /> : <Volume2 size={17} />}
                   再聽一次發音
                 </button>
@@ -1554,7 +1708,7 @@ function StudyApp({
                     onClick={(event) => {
                       event.stopPropagation()
                       unlockAudio()
-                      void playPronunciation(activeWord.word)
+                      startEnglishPlayback(activeWord.id, activeWord.word)
                     }}
                     type="button"
                   >
@@ -1589,7 +1743,7 @@ function StudyApp({
                     onClick={(event) => {
                       event.stopPropagation()
                       unlockAudio()
-                      speakMandarin(activeMeaningSections?.primary ?? activeWord.meaning)
+                      startMandarinPlayback(activeWord.id, activeMeaningSections?.primary ?? activeWord.meaning)
                     }}
                     type="button"
                   >
