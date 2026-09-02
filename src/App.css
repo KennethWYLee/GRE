@@ -266,7 +266,12 @@
 .account-identity strong, .account-identity small { overflow-wrap: anywhere; }
 .account-identity strong { font-family: var(--display); font-size: 1.08rem; font-weight: 650; }
 .account-identity small { color: var(--muted); font-size: .7rem; }
-.account-identity time { color: var(--muted); font-size: .61rem; }
+.account-times { display: flex; flex-wrap: wrap; gap: 4px 12px; color: var(--muted); }
+.account-times time, .account-times span { font-size: .61rem; }
+.account-progress { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-top: 8px; }
+.account-progress > div { display: grid; gap: 3px; padding: 10px; border: 1px solid var(--line); background: var(--card); }
+.account-progress strong { font-family: inherit; font-size: .68rem; font-weight: 850; }
+.account-progress span, .account-progress small, .account-progress time { color: var(--muted); font-size: .59rem; line-height: 1.45; }
 .account-status { width: max-content; padding: 3px 7px; border: 1px solid var(--line-dark); color: var(--muted); font-size: .58rem; font-weight: 850; letter-spacing: .06em; }
 .account-status.status-approved { border-color: var(--green); color: var(--green); }
 .account-status.status-rejected, .account-status.status-revoked { border-color: #9f4635; color: #9f4635; }
@@ -341,6 +346,7 @@
   .admin-summary > div { padding: 13px 5px; }
   .admin-summary span { font-size: .61rem; }
   .account-row { grid-template-columns: 1fr; gap: 12px; }
+  .account-progress { grid-template-columns: 1fr; }
   .account-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .account-actions button, .protected-admin { width: 100%; }
   .protected-admin { grid-column: 1 / -1; }

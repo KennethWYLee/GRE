@@ -13,6 +13,7 @@ import {
   UsersRound,
   X,
 } from 'lucide-react'
+import { apiFetch } from './api-client'
 
 export type AccountStatus = 'pending' | 'approved' | 'rejected' | 'revoked'
 
@@ -45,6 +46,22 @@ type AccountRecord = {
   reviewed_at: string | null
   reviewed_by: string | null
   last_seen_at: string | null
+  last_login_at: string | null
+  session_count: number
+  progress: {
+    words1000: DeckProgressSummary | null
+    words2000: DeckProgressSummary | null
+  }
+}
+
+type DeckProgressSummary = {
+  totalWords: number
+  studied: number
+  known: number
+  due: number
+  favorites: number
+  reviews: number
+  updatedAt: string | null
 }
 
 type AccountAccessProps = {
@@ -62,7 +79,7 @@ export function AccountAccess({ children }: AccountAccessProps) {
   const loadSession = useCallback(async () => {
     setError('')
     try {
-      const response = await fetch('/api/session', { headers: { accept: 'application/json' } })
+      const response = await apiFetch('/api/session', { headers: { accept: 'application/json' } })
       if (!response.ok) throw new Error(`HTTP ${response.status}`)
       setSession(await response.json() as AccessSession)
     } catch {
@@ -97,7 +114,7 @@ export function AccountAccess({ children }: AccountAccessProps) {
         <a className="access-primary" href={SIGN_IN_PATH} target="_top">
           <LogIn size={17} /> 使用 ChatGPT 登入
         </a>
-        <small>本站會接收你的 ChatGPT 顯示名稱與電子郵件，只用於帳號審核與存取控制。</small>
+        <small>本站會接收你的 ChatGPT 顯示名稱與電子郵件，並保存學習進度、登入與最近活動時間。</small>
       </AccessScreen>
     )
   }
@@ -162,7 +179,7 @@ function AdminPanel({ currentSession, onClose }: { currentSession: ApprovedSessi
     setLoading(true)
     setError('')
     try {
-      const response = await fetch('/api/admin/accounts', { headers: { accept: 'application/json' } })
+      const response = await apiFetch('/api/admin/accounts', { headers: { accept: 'application/json' } })
       if (!response.ok) throw new Error(`HTTP ${response.status}`)
       const payload = await response.json() as { accounts: AccountRecord[] }
       setAccounts(payload.accounts)
@@ -182,7 +199,7 @@ function AdminPanel({ currentSession, onClose }: { currentSession: ApprovedSessi
     setBusyEmail(email)
     setError('')
     try {
-      const response = await fetch(`/api/admin/accounts/${encodeURIComponent(email)}`, {
+      const response = await apiFetch(`/api/admin/accounts/${encodeURIComponent(email)}`, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ status }),
@@ -198,6 +215,7 @@ function AdminPanel({ currentSession, onClose }: { currentSession: ApprovedSessi
 
   const pendingCount = accounts.filter((account) => account.status === 'pending').length
   const approvedCount = accounts.filter((account) => account.status === 'approved').length
+  const sessionCount = accounts.reduce((sum, account) => sum + Number(account.session_count || 0), 0)
 
   return (
     <main className="admin-shell">
@@ -210,7 +228,7 @@ function AdminPanel({ currentSession, onClose }: { currentSession: ApprovedSessi
       <section className="admin-summary" aria-label="帳號審核統計">
         <div><span>等待審核</span><strong>{pendingCount}</strong></div>
         <div><span>已核准</span><strong>{approvedCount}</strong></div>
-        <div><span>目前管理員</span><strong>{accounts.filter((account) => account.role === 'admin').length}</strong></div>
+        <div><span>登入工作階段</span><strong>{sessionCount}</strong></div>
       </section>
 
       <div className="admin-toolbar">
@@ -230,7 +248,18 @@ function AdminPanel({ currentSession, onClose }: { currentSession: ApprovedSessi
                 <span className={`account-status status-${account.status}`}>{statusLabel(account)}</span>
                 <strong>{account.full_name || account.email}</strong>
                 <small>{account.email}</small>
-                <time>{account.role === 'admin' ? '系統管理員' : `申請：${formatDate(account.requested_at)}`}</time>
+                <div className="account-times">
+                  <time>{account.role === 'admin' ? '系統管理員' : `首次使用：${formatDate(account.requested_at)}`}</time>
+                  <time>最近登入：{account.last_login_at ? formatDate(account.last_login_at) : '尚無紀錄'}</time>
+                  <time>最近活動：{account.last_seen_at ? formatDate(account.last_seen_at) : '尚無紀錄'}</time>
+                  <span>登入工作階段：{account.session_count || 0}</span>
+                </div>
+                {account.status === 'approved' && (
+                  <div className="account-progress" aria-label={`${account.email} 的學習進度`}>
+                    <DeckProgress title="1000 字" summary={account.progress?.words1000} />
+                    <DeckProgress title="2000 字" summary={account.progress?.words2000} />
+                  </div>
+                )}
               </div>
               <div className="account-actions">
                 {account.role === 'admin' ? (
@@ -270,8 +299,25 @@ function AdminPanel({ currentSession, onClose }: { currentSession: ApprovedSessi
         </section>
       )}
 
-      <footer className="admin-footer"><Check size={14} /> 所有核准與撤銷都由伺服器即時執行</footer>
+      <footer className="admin-footer"><Check size={14} /> 學習進度、登入與最近活動時間均由伺服器保存</footer>
     </main>
+  )
+}
+
+function DeckProgress({ title, summary }: { title: string; summary: DeckProgressSummary | null }) {
+  return (
+    <div>
+      <strong>{title}</strong>
+      {summary ? (
+        <>
+          <span>已學 {summary.studied} / {summary.totalWords} · 熟悉 {summary.known} · 待複習 {summary.due}</span>
+          <small>收藏 {summary.favorites} · 累計複習 {summary.reviews} 次</small>
+          <time>同步：{summary.updatedAt ? formatDate(summary.updatedAt) : '尚無紀錄'}</time>
+        </>
+      ) : (
+        <span>尚未開始</span>
+      )}
+    </div>
   )
 }
 

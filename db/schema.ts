@@ -18,6 +18,18 @@ export const studyProgressSchemaSql = `CREATE TABLE IF NOT EXISTS study_progress
   deck_id TEXT NOT NULL CHECK (deck_id IN ('words1000', 'words2000')),
   progress_json TEXT NOT NULL,
   client_updated_at INTEGER NOT NULL DEFAULT 0,
+  server_revision INTEGER NOT NULL DEFAULT 0,
   updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (email, deck_id)
 )`
+
+export const userSessionsSchemaSql = `CREATE TABLE IF NOT EXISTS user_sessions (
+  email TEXT NOT NULL COLLATE NOCASE,
+  session_id TEXT NOT NULL,
+  started_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  last_active_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (email, session_id)
+)`
+
+export const userSessionsEmailStartedIndexSql = `CREATE INDEX IF NOT EXISTS idx_user_sessions_email_started
+ON user_sessions(email, started_at DESC)`

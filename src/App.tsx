@@ -28,6 +28,7 @@ import {
 } from 'lucide-react'
 import { Button } from './components/ui/button'
 import { AccountAccess, type ApprovedSession } from './AccountAccess'
+import { apiFetch } from './api-client'
 import moeMandarinAudio from './moe-mandarin-audio.json'
 import wikimediaEnglishAudio from './wikimedia-english-audio.json'
 import wikimediaMandarinAudio from './wikimedia-mandarin-audio.json'
@@ -37,13 +38,16 @@ import {
   calculateStreak,
   dueWordIds,
   emptyMemory,
+  getOrCreateDeviceId,
   loadMemory,
   localDateKey,
   mergeMemory,
+  normalizeMemory,
   normalizeSpelling,
   quizValue,
   recordReview,
   saveMemory,
+  setPosition,
   toggleFavorite,
   type DeckId,
   type MemoryStore,
@@ -58,6 +62,17 @@ type MandarinStatus = 'idle' | 'loading' | 'human-moe' | 'human-wikimedia' | 'mi
 type SequenceMode = 'fixed' | 'random'
 type CardMode = 'flashcard' | 'quiz'
 type SyncStatus = 'idle' | 'loading' | 'synced' | 'offline'
+
+type ProgressResponse = {
+  progress: unknown
+  revision: number
+}
+
+type SaveProgressResponse = {
+  ok?: boolean
+  progress?: unknown
+  revision: number
+}
 
 type PartSummary = {
   id: number
@@ -273,11 +288,15 @@ function StudyApp({
   const [mandarinAutoplay, setMandarinAutoplay] = useState(loadMandarinAutoplay)
   const [autoPlay, setAutoPlay] = useState(false)
   const [cardDuration, setCardDuration] = useState(loadAutoplaySeconds)
+  const deviceId = useMemo(() => getOrCreateDeviceId(), [])
   const touchStartX = useRef<number | null>(null)
   const audioRef = useRef<HTMLAudioElement | null>(null)
   const audioUnlockedRef = useRef(false)
   const pronunciationRequestRef = useRef(0)
   const mandarinRequestRef = useRef(0)
+  const syncRevisionRef = useRef(0)
+  const lastSyncedMemoryRef = useRef('')
+  const syncRequestRef = useRef(0)
   const pronunciationPreloadRef = useRef(new Map<string, HTMLAudioElement>())
   const mandarinPreloadRef = useRef(new Map<string, HTMLAudioElement>())
 
@@ -563,7 +582,7 @@ function StudyApp({
   useEffect(() => {
     if (!selectedDeck) return
     const controller = new AbortController()
-    fetch(`/api/vocabulary?deck=${selectedDeck}`, { signal: controller.signal })
+    apiFetch(`/api/vocabulary?deck=${selectedDeck}`, { signal: controller.signal })
       .then((response) => {
         if (!response.ok) throw new Error(`HTTP ${response.status}`)
         return response.json() as Promise<VocabularyData>
@@ -582,13 +601,19 @@ function StudyApp({
   useEffect(() => {
     if (!selectedDeck) return
     const controller = new AbortController()
-    fetch(`/api/progress?deck=${selectedDeck}`, { signal: controller.signal })
+    syncRequestRef.current += 1
+    syncRevisionRef.current = 0
+    lastSyncedMemoryRef.current = ''
+    apiFetch(`/api/progress?deck=${selectedDeck}`, { signal: controller.signal })
       .then((response) => {
         if (!response.ok) throw new Error(`HTTP ${response.status}`)
-        return response.json() as Promise<{ progress: unknown }>
+        return response.json() as Promise<ProgressResponse>
       })
       .then((payload) => {
+        const normalizedRemote = normalizeMemory(payload.progress)
         const merged = mergeMemory(loadMemory(selectedDeck), payload.progress)
+        syncRevisionRef.current = Number(payload.revision) || 0
+        lastSyncedMemoryRef.current = JSON.stringify(normalizedRemote)
         saveMemory(selectedDeck, merged)
         setMemory(merged)
         setSyncReady(true)
@@ -606,17 +631,34 @@ function StudyApp({
     if (!selectedDeck) return
     saveMemory(selectedDeck, memory)
     if (!syncReady) return
+    const serializedMemory = JSON.stringify(memory)
+    if (serializedMemory === lastSyncedMemoryRef.current) return
     const timeout = window.setTimeout(() => {
-      fetch(`/api/progress?deck=${selectedDeck}`, {
+      const requestId = syncRequestRef.current + 1
+      syncRequestRef.current = requestId
+      setSyncStatus('loading')
+      apiFetch(`/api/progress?deck=${selectedDeck}`, {
         method: 'PUT',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ progress: memory }),
+        body: JSON.stringify({ progress: memory, baseRevision: syncRevisionRef.current }),
       })
-        .then((response) => {
+        .then(async (response) => {
+          const payload = await response.json() as SaveProgressResponse
+          if (requestId !== syncRequestRef.current) return
+          if (response.status === 409 && payload.progress) {
+            syncRevisionRef.current = Number(payload.revision) || 0
+            lastSyncedMemoryRef.current = ''
+            setMemory((current) => mergeMemory(current, payload.progress))
+            return
+          }
           if (!response.ok) throw new Error(`HTTP ${response.status}`)
+          syncRevisionRef.current = Number(payload.revision) || syncRevisionRef.current
+          lastSyncedMemoryRef.current = serializedMemory
           setSyncStatus('synced')
         })
-        .catch(() => setSyncStatus('offline'))
+        .catch(() => {
+          if (requestId === syncRequestRef.current) setSyncStatus('offline')
+        })
     }, 650)
     return () => window.clearTimeout(timeout)
   }, [memory, selectedDeck, syncReady])
@@ -733,11 +775,7 @@ function StudyApp({
       setCardIndex(nextIndex)
       setFlipped(false)
       if (!dailyReview && !favoriteReview && cardMode === 'flashcard' && sequenceMode === 'fixed' && selectedPart !== null && studyMode === 'all' && rootFilter === 'all' && !query) {
-        setMemory((current) => ({
-          ...current,
-          positions: { ...current.positions, [String(selectedPart)]: nextIndex },
-          updatedAt: Date.now(),
-        }))
+        setMemory((current) => setPosition(current, String(selectedPart), nextIndex))
       }
     }, totalMilliseconds)
 
@@ -878,17 +916,13 @@ function StudyApp({
     setCardIndex(next)
     setFlipped(false)
     if (!dailyReview && !favoriteReview && cardMode === 'flashcard' && sequenceMode === 'fixed' && selectedPart !== null && studyMode === 'all' && rootFilter === 'all' && !query) {
-      setMemory((current) => ({
-        ...current,
-        positions: { ...current.positions, [String(selectedPart)]: next },
-        updatedAt: Date.now(),
-      }))
+      setMemory((current) => setPosition(current, String(selectedPart), next))
     }
   }
 
   const markRecall = (recall: RecallState) => {
     if (!activeWord) return
-    setMemory((current) => recordReview(current, activeWord.id, recall))
+    setMemory((current) => recordReview(current, activeWord.id, recall, undefined, Date.now(), deviceId))
     setSessionReviewedIds((current) => current.includes(activeWord.id) ? current : [...current, activeWord.id])
     if (cardIndex < studyWords.length - 1) {
       window.setTimeout(() => moveCard(1), 100)
@@ -984,7 +1018,14 @@ function StudyApp({
       ? normalizeSpelling(answer) === normalizeSpelling(correctValue)
       : answer === correctValue
     setQuizFeedback({ correct, correctValue })
-    setMemory((current) => recordReview(current, activeWord.id, correct ? 'known' : 'again', correct ? 'correct' : 'wrong'))
+    setMemory((current) => recordReview(
+      current,
+      activeWord.id,
+      correct ? 'known' : 'again',
+      correct ? 'correct' : 'wrong',
+      Date.now(),
+      deviceId,
+    ))
     setSessionReviewedIds((current) => current.includes(activeWord.id) ? current : [...current, activeWord.id])
     const nextQuiz = advanceQuiz(quizQueue, cardIndex, activeWord.id, correct)
     setQuizQueue(nextQuiz.queue)

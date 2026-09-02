@@ -6,8 +6,10 @@ import {
   dueWordIds,
   emptyMemory,
   mergeMemory,
+  normalizeMemory,
   normalizeSpelling,
   recordReview,
+  setPosition,
   toggleFavorite,
 } from '../src/study-memory.ts'
 
@@ -28,7 +30,7 @@ assert.equal(memory.schedule['word-3'].intervalDays, 2)
 memory = toggleFavorite(memory, 'word-2', now + 1)
 assert.equal(memory.favorites['word-2'], true)
 memory = toggleFavorite(memory, 'word-2', now + 2)
-assert.equal(memory.favorites['word-2'], undefined)
+assert.equal(memory.favorites['word-2'], false)
 
 let streakMemory = recordReview(emptyMemory(), 'yesterday', 'known', undefined, now - dayMs)
 streakMemory = recordReview(streakMemory, 'today', 'known', 'correct', now)
@@ -38,6 +40,35 @@ assert.equal(streakMemory.activity['2026-09-01'].quizCorrect, 1)
 const remote = { ...memory, updatedAt: memory.updatedAt + 100, favorites: { remote: true } }
 assert.equal(mergeMemory(memory, remote).favorites.remote, true)
 assert.equal(mergeMemory(remote, memory).favorites.remote, true)
+
+let deviceA = recordReview(emptyMemory(), 'device-a-word', 'known', undefined, now + 200, 'device-a')
+deviceA = setPosition(deviceA, '1', 7, now + 201)
+deviceA = toggleFavorite(deviceA, 'shared-favorite', now + 202)
+let deviceB = recordReview(emptyMemory(), 'device-b-word', 'hard', 'correct', now + 300, 'device-b')
+deviceB = setPosition(deviceB, '2', 9, now + 301)
+deviceB = toggleFavorite(deviceB, 'shared-favorite', now + 302)
+const concurrent = mergeMemory(deviceA, deviceB)
+assert.equal(concurrent.schedule['device-a-word'].repetitions, 1)
+assert.equal(concurrent.schedule['device-b-word'].repetitions, 1)
+assert.equal(concurrent.positions['1'], 7)
+assert.equal(concurrent.positions['2'], 9)
+assert.equal(concurrent.favorites['shared-favorite'], true)
+assert.equal(concurrent.activity['2026-09-01'].reviews, 2)
+const favoriteRemoval = toggleFavorite(concurrent, 'shared-favorite', now + 400)
+assert.equal(mergeMemory(concurrent, favoriteRemoval).favorites['shared-favorite'], false)
+
+const migratedLegacy = normalizeMemory({
+  version: 3,
+  recall: {},
+  positions: { '1': 2 },
+  schedule: {},
+  favorites: { legacy: true },
+  activity: { '2026-08-31': { reviews: 4, known: 2, quizCorrect: 1, quizWrong: 1 } },
+  updatedAt: now,
+})
+assert.equal(migratedLegacy.version, 4)
+assert.equal(migratedLegacy.activity['2026-08-31'].reviews, 4)
+assert.equal(migratedLegacy.positionUpdatedAt['1'], now)
 
 const quizWords = [
   { sourceNo: 1, word: 'abate', meaning: '減弱', root: 'bate 減少' },
@@ -63,4 +94,6 @@ console.log(JSON.stringify({
   streaks: true,
   quizChoices: true,
   wrongAnswersReturnToQueue: true,
+  concurrentDeviceMerge: true,
+  legacyProgressMigration: true,
 }, null, 2))

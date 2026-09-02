@@ -8,6 +8,10 @@ const VOCABULARY_JSON_BY_DECK = {
   words1000: JSON.stringify(vocabulary1000Data),
   words2000: JSON.stringify(vocabulary2000Data),
 }
+const TOTAL_WORDS_BY_DECK = {
+  words1000: Number(vocabulary1000Data.meta.totalWords),
+  words2000: Number(vocabulary2000Data.meta.totalWords),
+}
 let schemaReadyPromise = null
 
 export default {
@@ -116,6 +120,8 @@ async function getSession(request, env) {
     ).bind(access.email, identity.userId, identity.fullName).run()
   }
 
+  await recordSession(env.DB, access.email, readSessionId(request))
+
   const account = await env.DB.prepare(
     `SELECT email, full_name, status, role, requested_at, reviewed_at, reviewed_by
      FROM account_access WHERE email = ?`,
@@ -175,18 +181,19 @@ async function getStudyProgress(request, env, requestUrl) {
   if (!VOCABULARY_JSON_BY_DECK[deckId]) return json({ error: 'invalid_deck' }, 400)
 
   const row = await env.DB.prepare(
-    `SELECT progress_json, client_updated_at, updated_at
+    `SELECT progress_json, client_updated_at, server_revision, updated_at
      FROM study_progress WHERE email = ? AND deck_id = ?`,
   ).bind(access.session.email, deckId).first()
 
-  if (!row) return json({ progress: null, clientUpdatedAt: 0, updatedAt: null })
-  let progress = null
-  try {
-    progress = JSON.parse(row.progress_json)
-  } catch {
-    return json({ error: 'invalid_stored_progress' }, 500)
-  }
-  return json({ progress, clientUpdatedAt: row.client_updated_at, updatedAt: row.updated_at })
+  if (!row) return json({ progress: null, clientUpdatedAt: 0, revision: 0, updatedAt: null })
+  const progress = parseStoredProgress(row)
+  if (!progress) return json({ error: 'invalid_stored_progress' }, 500)
+  return json({
+    progress,
+    clientUpdatedAt: row.client_updated_at,
+    revision: Number(row.server_revision) || 0,
+    updatedAt: row.updated_at,
+  })
 }
 
 async function saveStudyProgress(request, env, requestUrl) {
@@ -206,20 +213,69 @@ async function saveStudyProgress(request, env, requestUrl) {
   const progressJson = JSON.stringify(progress)
   if (progressJson.length > 1_000_000) return json({ error: 'progress_too_large' }, 413)
   const clientUpdatedAt = Number(progress.updatedAt)
-  await env.DB.prepare(
-    `INSERT INTO study_progress (email, deck_id, progress_json, client_updated_at, updated_at)
-     VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
+  const existing = await env.DB.prepare(
+    `SELECT progress_json, client_updated_at, server_revision, updated_at
+     FROM study_progress WHERE email = ? AND deck_id = ?`,
+  ).bind(access.session.email, deckId).first()
+  const currentRevision = Number(existing?.server_revision) || 0
+  const requestedRevision = Number(payload?.baseRevision)
+  const baseRevision = Number.isInteger(requestedRevision) && requestedRevision >= 0
+    ? requestedRevision
+    : currentRevision
+  if (baseRevision !== currentRevision) return progressConflict(existing)
+
+  const nextRevision = currentRevision + 1
+  const result = await env.DB.prepare(
+    `INSERT INTO study_progress (
+       email, deck_id, progress_json, client_updated_at, server_revision, updated_at
+     ) VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
      ON CONFLICT(email, deck_id) DO UPDATE SET
        progress_json = excluded.progress_json,
        client_updated_at = excluded.client_updated_at,
+       server_revision = excluded.server_revision,
        updated_at = CURRENT_TIMESTAMP
-     WHERE excluded.client_updated_at >= study_progress.client_updated_at`,
-  ).bind(access.session.email, deckId, progressJson, clientUpdatedAt).run()
+     WHERE study_progress.server_revision = ?`,
+  ).bind(
+    access.session.email,
+    deckId,
+    progressJson,
+    clientUpdatedAt,
+    nextRevision,
+    currentRevision,
+  ).run()
 
   const row = await env.DB.prepare(
-    `SELECT client_updated_at, updated_at FROM study_progress WHERE email = ? AND deck_id = ?`,
+    `SELECT progress_json, client_updated_at, server_revision, updated_at
+     FROM study_progress WHERE email = ? AND deck_id = ?`,
   ).bind(access.session.email, deckId).first()
-  return json({ ok: true, clientUpdatedAt: row?.client_updated_at ?? clientUpdatedAt, updatedAt: row?.updated_at ?? null })
+  if (!result.meta?.changes || Number(row?.server_revision) !== nextRevision) return progressConflict(row)
+  return json({
+    ok: true,
+    clientUpdatedAt: row?.client_updated_at ?? clientUpdatedAt,
+    revision: nextRevision,
+    updatedAt: row?.updated_at ?? null,
+  })
+}
+
+function progressConflict(row) {
+  if (!row) return json({ error: 'progress_conflict', progress: null, revision: 0 }, 409)
+  const progress = parseStoredProgress(row)
+  if (!progress) return json({ error: 'invalid_stored_progress' }, 500)
+  return json({
+    error: 'progress_conflict',
+    progress,
+    clientUpdatedAt: row.client_updated_at,
+    revision: Number(row.server_revision) || 0,
+    updatedAt: row.updated_at,
+  }, 409)
+}
+
+function parseStoredProgress(row) {
+  try {
+    return JSON.parse(row.progress_json)
+  } catch {
+    return null
+  }
 }
 
 function isProgressPayload(progress) {
@@ -237,7 +293,7 @@ async function listAccounts(request, env) {
   const access = await requireAdmin(request, env)
   if (access.response) return access.response
 
-  const result = await env.DB.prepare(
+  const accountsResult = await env.DB.prepare(
     `SELECT email, full_name, status, role, requested_at, reviewed_at, reviewed_by, last_seen_at
      FROM account_access
      ORDER BY
@@ -245,8 +301,63 @@ async function listAccounts(request, env) {
        CASE status WHEN 'pending' THEN 0 WHEN 'approved' THEN 1 WHEN 'rejected' THEN 2 ELSE 3 END,
        requested_at DESC`,
   ).all()
+  const progressResult = await env.DB.prepare(
+    `SELECT email, deck_id, progress_json, updated_at
+     FROM study_progress
+     ORDER BY email, deck_id`,
+  ).all()
+  const sessionsResult = await env.DB.prepare(
+    `SELECT email, COUNT(*) AS session_count, MAX(started_at) AS last_login_at
+     FROM user_sessions
+     GROUP BY email`,
+  ).all()
 
-  return json({ accounts: result.results ?? [] })
+  const progressByEmail = new Map()
+  for (const row of progressResult.results ?? []) {
+    const email = normalizeEmail(row.email)
+    if (!progressByEmail.has(email)) progressByEmail.set(email, { words1000: null, words2000: null })
+    if (TOTAL_WORDS_BY_DECK[row.deck_id]) {
+      progressByEmail.get(email)[row.deck_id] = summarizeProgress(row.progress_json, row.deck_id, row.updated_at)
+    }
+  }
+  const sessionsByEmail = new Map(
+    (sessionsResult.results ?? []).map((row) => [normalizeEmail(row.email), row]),
+  )
+  const accounts = (accountsResult.results ?? []).map((account) => {
+    const email = normalizeEmail(account.email)
+    const sessions = sessionsByEmail.get(email)
+    return {
+      ...account,
+      session_count: Number(sessions?.session_count) || 0,
+      last_login_at: sessions?.last_login_at ?? null,
+      progress: progressByEmail.get(email) ?? { words1000: null, words2000: null },
+    }
+  })
+
+  return json({ accounts })
+}
+
+function summarizeProgress(progressJson, deckId, updatedAt) {
+  let progress
+  try {
+    progress = JSON.parse(progressJson)
+  } catch {
+    return null
+  }
+  const recall = progress?.recall && typeof progress.recall === 'object' ? progress.recall : {}
+  const schedule = progress?.schedule && typeof progress.schedule === 'object' ? progress.schedule : {}
+  const favorites = progress?.favorites && typeof progress.favorites === 'object' ? progress.favorites : {}
+  const activity = progress?.activity && typeof progress.activity === 'object' ? progress.activity : {}
+  const now = Date.now()
+  return {
+    totalWords: TOTAL_WORDS_BY_DECK[deckId],
+    studied: Object.keys(schedule).length,
+    known: Object.values(recall).filter((state) => state === 'known').length,
+    due: Object.values(schedule).filter((entry) => Number(entry?.dueAt) <= now).length,
+    favorites: Object.values(favorites).filter(Boolean).length,
+    reviews: Object.values(activity).reduce((sum, day) => sum + (Number(day?.reviews) || 0), 0),
+    updatedAt: updatedAt ?? null,
+  }
 }
 
 async function updateAccount(request, env, rawEmail) {
@@ -295,6 +406,20 @@ function readIdentity(request) {
   return { email, userId, fullName: fullName.trim() }
 }
 
+function readSessionId(request) {
+  const sessionId = (request.headers.get('x-gre-session-id') ?? '').trim()
+  return /^[a-zA-Z0-9-]{16,100}$/.test(sessionId) ? sessionId : ''
+}
+
+async function recordSession(db, email, sessionId) {
+  if (!sessionId) return
+  await db.prepare(
+    `INSERT INTO user_sessions (email, session_id, started_at, last_active_at)
+     VALUES (?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+     ON CONFLICT(email, session_id) DO UPDATE SET last_active_at = CURRENT_TIMESTAMP`,
+  ).bind(email, sessionId).run()
+}
+
 async function ensureAccountSchema(env) {
   if (!env.DB?.prepare) throw new Error('D1 binding DB is unavailable')
   if (!schemaReadyPromise) schemaReadyPromise = initializeAccountSchema(env.DB)
@@ -332,9 +457,23 @@ async function initializeAccountSchema(db) {
         deck_id TEXT NOT NULL CHECK (deck_id IN ('words1000', 'words2000')),
         progress_json TEXT NOT NULL,
         client_updated_at INTEGER NOT NULL DEFAULT 0,
+        server_revision INTEGER NOT NULL DEFAULT 0,
         updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
         PRIMARY KEY (email, deck_id)
       )`,
+    ),
+    db.prepare(
+      `CREATE TABLE IF NOT EXISTS user_sessions (
+        email TEXT NOT NULL COLLATE NOCASE,
+        session_id TEXT NOT NULL,
+        started_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        last_active_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (email, session_id)
+      )`,
+    ),
+    db.prepare(
+      `CREATE INDEX IF NOT EXISTS idx_user_sessions_email_started
+       ON user_sessions(email, started_at DESC)`,
     ),
     ...ADMIN_EMAILS.map((email) =>
       db.prepare(
@@ -344,6 +483,7 @@ async function initializeAccountSchema(db) {
         ON CONFLICT(email) DO UPDATE SET status = 'approved', role = 'admin'`,
       ).bind(email),
     ),
+    db.prepare('PRAGMA optimize'),
   ])
 }
 
