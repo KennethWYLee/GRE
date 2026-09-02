@@ -31,7 +31,6 @@ import { Button } from './components/ui/button'
 import { AccountAccess, type ApprovedSession } from './AccountAccess'
 import { apiFetch } from './api-client'
 import { runAutoplayCard } from './autoplay'
-import wikimediaEnglishAudio from './wikimedia-english-audio.json'
 import {
   advanceQuiz,
   buildQuizOptions,
@@ -57,7 +56,7 @@ import {
 import './App.css'
 
 type StudyMode = 'all' | 'review' | 'known' | 'favorites'
-type PronunciationStatus = 'idle' | 'loading' | 'human-us' | 'human-other' | 'ai' | 'unavailable'
+type PronunciationStatus = 'idle' | 'loading' | 'ai' | 'unavailable'
 type MandarinStatus = 'idle' | 'loading' | 'ai' | 'unavailable'
 type SequenceMode = 'fixed' | 'random'
 type CardMode = 'flashcard' | 'quiz'
@@ -121,22 +120,9 @@ const SEQUENCE_MODE_KEY = 'gre-roots-sequence-mode-v1'
 const AUTOPLAY_SECONDS_KEY = 'gre-roots-autoplay-seconds-v1'
 const MANDARIN_AUTOPLAY_KEY = 'gre-roots-mandarin-autoplay-v1'
 const AUTOPLAY_OPTIONS = [3, 5, 8, 10, 15, 20, 30] as const
-const PRONUNCIATION_LOOKAHEAD = 20
-const HUMAN_RECORDING_START_WAIT_MS = 2_500
 const SPEECH_COMPLETION_TIMEOUT_MS = 15_000
 const PAUSE_AFTER_SPEECH_MS = 1_000
 const SPEECH_VOLUME = 1
-const WIKIMEDIA_ENGLISH_RECORDINGS = wikimediaEnglishAudio.recordings as Record<string, {
-  url: string
-  accent: 'en-US' | 'en'
-  accentLabel: string
-  filename: string
-  sourceUrl: string
-  artist: string
-  license: string
-  licenseUrl: string
-  note: string
-}>
 const SILENT_AUDIO =
   'data:audio/wav;base64,UklGRiYAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQIAAACAgA=='
 
@@ -200,6 +186,14 @@ function mandarinSpeechText(value: string) {
     .trim()
 }
 
+function selectEnglishVoice(voices: SpeechSynthesisVoice[]) {
+  const candidates = voices.filter((voice) => voice.lang.toLocaleLowerCase().startsWith('en-us'))
+  return candidates.find((voice) => /natural|neural|premium|enhanced|online/i.test(voice.name)) ??
+    candidates.find((voice) => /google us english|samantha|ava|jenny|aria|joanna/i.test(voice.name)) ??
+    candidates[0] ??
+    null
+}
+
 function selectMandarinVoice(voices: SpeechSynthesisVoice[]) {
   const candidates = voices.filter((voice) => {
     const language = voice.lang.toLocaleLowerCase()
@@ -250,14 +244,12 @@ function StudyApp({
   const [cardDuration, setCardDuration] = useState(loadAutoplaySeconds)
   const deviceId = useMemo(() => getOrCreateDeviceId(), [])
   const touchStartX = useRef<number | null>(null)
-  const audioRef = useRef<HTMLAudioElement | null>(null)
   const audioUnlockedRef = useRef(false)
   const pronunciationRequestRef = useRef(0)
   const mandarinRequestRef = useRef(0)
   const syncRevisionRef = useRef(0)
   const lastSyncedMemoryRef = useRef('')
   const syncRequestRef = useRef(0)
-  const pronunciationPreloadRef = useRef(new Map<string, HTMLAudioElement>())
   const englishPlaybackRef = useRef<PlaybackEntry | null>(null)
   const mandarinPlaybackRef = useRef<PlaybackEntry | null>(null)
 
@@ -268,28 +260,6 @@ function StudyApp({
     void silent.play()
       .then(() => { audioUnlockedRef.current = true })
       .catch(() => undefined)
-  }, [])
-
-  const preloadRecording = useCallback((word: string) => {
-    const key = word.toLocaleLowerCase()
-    const recording = WIKIMEDIA_ENGLISH_RECORDINGS[key]
-    if (!recording) return
-    if (pronunciationPreloadRef.current.has(key)) return
-
-    const audio = new Audio(recording.url)
-    audio.preload = 'auto'
-    audio.volume = SPEECH_VOLUME
-    audio.load()
-    pronunciationPreloadRef.current.set(key, audio)
-
-    while (pronunciationPreloadRef.current.size > PRONUNCIATION_LOOKAHEAD * 2) {
-      const oldestKey = pronunciationPreloadRef.current.keys().next().value
-      if (typeof oldestKey !== 'string') break
-      const oldestAudio = pronunciationPreloadRef.current.get(oldestKey)
-      oldestAudio?.pause()
-      oldestAudio?.removeAttribute('src')
-      pronunciationPreloadRef.current.delete(oldestKey)
-    }
   }, [])
 
   const speakWithDevice = useCallback((word: string, requestId: number) => (
@@ -303,7 +273,6 @@ function StudyApp({
       const synth = window.speechSynthesis
       synth.cancel()
       const utterance = new SpeechSynthesisUtterance(word)
-      const voices = synth.getVoices().filter((voice) => voice.lang.toLocaleLowerCase().startsWith('en-us'))
       let settled = false
       const finish = (played: boolean) => {
         if (settled) return
@@ -318,10 +287,7 @@ function StudyApp({
         synth.cancel()
         finish(false)
       }, SPEECH_COMPLETION_TIMEOUT_MS)
-      utterance.voice =
-        voices.find((voice) => /samantha|ava|jenny|aria|joanna|natural|google us english/i.test(voice.name)) ??
-        voices[0] ??
-        null
+      utterance.voice = selectEnglishVoice(synth.getVoices())
       utterance.lang = 'en-US'
       utterance.rate = 0.88
       utterance.pitch = 1
@@ -348,59 +314,7 @@ function StudyApp({
     mandarinRequestRef.current += 1
     setMandarinStatus('idle')
 
-    if (audioRef.current) {
-      audioRef.current.pause()
-      audioRef.current.currentTime = 0
-    }
     window.speechSynthesis?.cancel()
-
-    const key = word.toLocaleLowerCase()
-    const recording = WIKIMEDIA_ENGLISH_RECORDINGS[key]
-
-    if (recording) {
-      const played = await new Promise<boolean>((resolve) => {
-        const preloadedAudio = pronunciationPreloadRef.current.get(key)
-        const audio = preloadedAudio ?? new Audio(recording.url)
-        pronunciationPreloadRef.current.delete(key)
-        audio.volume = SPEECH_VOLUME
-        audioRef.current = audio
-        let settled = false
-        const finish = (completed: boolean) => {
-          if (settled) return
-          settled = true
-          window.clearTimeout(startTimer)
-          window.clearTimeout(completionTimer)
-          audio.onplay = null
-          audio.onended = null
-          audio.onerror = null
-          audio.onpause = null
-          resolve(completed)
-        }
-        const startTimer = window.setTimeout(() => {
-          audio.pause()
-          finish(false)
-        }, HUMAN_RECORDING_START_WAIT_MS)
-        const completionTimer = window.setTimeout(() => {
-          audio.pause()
-          finish(false)
-        }, SPEECH_COMPLETION_TIMEOUT_MS)
-        audio.onplay = () => {
-          window.clearTimeout(startTimer)
-          if (requestId === pronunciationRequestRef.current) {
-            setPronunciationStatus(recording.accent === 'en-US' ? 'human-us' : 'human-other')
-          }
-        }
-        audio.onended = () => finish(true)
-        audio.onerror = () => finish(false)
-        audio.onpause = () => {
-          if (!audio.ended) finish(false)
-        }
-        void audio.play().catch(() => finish(false))
-      })
-      if (requestId !== pronunciationRequestRef.current) return false
-      if (played) return true
-    }
-
     return speakWithDevice(word, requestId)
   }, [speakWithDevice])
 
@@ -451,10 +365,6 @@ function StudyApp({
     const requestId = mandarinRequestRef.current + 1
     mandarinRequestRef.current = requestId
     pronunciationRequestRef.current += 1
-    if (audioRef.current) {
-      audioRef.current.pause()
-      audioRef.current.currentTime = 0
-    }
     setPronunciationStatus('idle')
     window.speechSynthesis?.cancel()
 
@@ -495,7 +405,6 @@ function StudyApp({
     mandarinRequestRef.current += 1
     englishPlaybackRef.current = null
     mandarinPlaybackRef.current = null
-    audioRef.current?.pause()
     window.speechSynthesis?.cancel()
     setPronunciationStatus('idle')
     setMandarinStatus('idle')
@@ -663,16 +572,6 @@ function StudyApp({
     }, 80)
     return () => window.clearTimeout(timeout)
   }, [activeMeaningSections, activeWord, autoPlay, cardMode, flipped, mandarinAutoplay, startMandarinPlayback])
-
-  useEffect(() => {
-    if (!activeWord) return
-    preloadRecording(activeWord.word)
-    const upcomingWords = studyWords.slice(
-      cardIndex + 1,
-      cardIndex + 1 + PRONUNCIATION_LOOKAHEAD,
-    )
-    for (const word of upcomingWords) preloadRecording(word.word)
-  }, [activeWord, cardIndex, preloadRecording, studyWords])
 
   useEffect(() => {
     if (!activeWord) return
@@ -1048,7 +947,6 @@ function StudyApp({
     window.localStorage.setItem(MANDARIN_AUTOPLAY_KEY, nextValue ? 'on' : 'off')
     if (!nextValue) {
       mandarinRequestRef.current += 1
-      audioRef.current?.pause()
       window.speechSynthesis?.cancel()
       setMandarinStatus('idle')
     }
@@ -1269,18 +1167,11 @@ function StudyApp({
   const partRemaining = partTotal - partKnown
   const partKnownPercent = partTotal ? Math.round((partKnown / partTotal) * 100) : 0
   const currentRecall = activeWord ? memory.recall[activeWord.id] : undefined
-  const activeEnglishRecording = activeWord
-    ? WIKIMEDIA_ENGLISH_RECORDINGS[activeWord.word.toLocaleLowerCase()]
-    : undefined
   const pronunciationLabel =
-    pronunciationStatus === 'human-us' ? '美式真人發音' :
-    pronunciationStatus === 'human-other' ? `${activeEnglishRecording?.accentLabel ?? '英語'}真人發音` :
-    pronunciationStatus === 'ai' ? 'AI／裝置合成發音' :
-    pronunciationStatus === 'loading' ? '載入真人發音' :
+    pronunciationStatus === 'ai' ? '高品質 AI 英文發音' :
+    pronunciationStatus === 'loading' ? '準備 AI 英文發音' :
     pronunciationStatus === 'unavailable' ? '重新播放發音' :
-    activeEnglishRecording
-      ? `播放${activeEnglishRecording.accent === 'en-US' ? '美式' : activeEnglishRecording.accentLabel}真人發音`
-      : '播放 AI／裝置合成發音'
+      '播放高品質 AI 英文發音'
   const mandarinLabel =
     mandarinStatus === 'ai' ? 'AI／裝置合成中文發音' :
     mandarinStatus === 'loading' ? '準備 AI 中文發音' :
@@ -1461,15 +1352,7 @@ function StudyApp({
                   {pronunciationStatus === 'loading' ? <LoaderCircle className="pronounce-spinner" size={17} /> : <Volume2 size={17} />}
                   再聽一次發音
                 </button>
-                {activeEnglishRecording ? (
-                  <p className="english-source-note">
-                    真人錄音：{activeEnglishRecording.artist} · {activeEnglishRecording.accentLabel} ·{' '}
-                    <a href={activeEnglishRecording.sourceUrl} rel="noreferrer" target="_blank">來源</a>
-                    {' · '}<a href={activeEnglishRecording.licenseUrl} rel="noreferrer" target="_blank">{activeEnglishRecording.license}</a>
-                  </p>
-                ) : (
-                  <p className="english-source-note">未找到授權清楚的真人錄音，使用 AI／裝置合成語音。</p>
-                )}
+                <p className="english-source-note">優先使用此裝置可用的 Natural／Neural 高品質美式英語合成語音。</p>
               </div>
             ) : (
               <div className="quiz-prompt">
@@ -1540,7 +1423,7 @@ function StudyApp({
                   <h2>{activeWord.word}</h2>
                   {activeWord.pronunciation && <p>/{activeWord.pronunciation}/</p>}
                   <button
-                    aria-label={`重播 ${activeWord.word} 的${activeEnglishRecording ? '真人' : 'AI／裝置合成'}發音`}
+                    aria-label={`重播 ${activeWord.word} 的高品質 AI 英文發音`}
                     className={`pronounce-button status-${pronunciationStatus}`}
                     onClick={(event) => {
                       event.stopPropagation()
@@ -1554,15 +1437,7 @@ function StudyApp({
                       <Volume2 size={17} />}
                     <span aria-live="polite">{pronunciationLabel}</span>
                   </button>
-                  {activeEnglishRecording ? (
-                    <p className="english-source-note" onClick={(event) => event.stopPropagation()}>
-                      真人錄音：{activeEnglishRecording.artist} · {activeEnglishRecording.accentLabel} ·{' '}
-                      <a href={activeEnglishRecording.sourceUrl} rel="noreferrer" target="_blank">來源</a>
-                      {' · '}<a href={activeEnglishRecording.licenseUrl} rel="noreferrer" target="_blank">{activeEnglishRecording.license}</a>
-                    </p>
-                  ) : (
-                    <p className="english-source-note">未找到授權清楚的真人錄音，使用 AI／裝置合成語音。</p>
-                  )}
+                  <p className="english-source-note">優先使用此裝置可用的 Natural／Neural 高品質美式英語合成語音。</p>
                 </div>
                 <p className="flip-hint"><RotateCcw size={14} /> 輕觸翻面 · 左右滑動換字</p>
               </div>
