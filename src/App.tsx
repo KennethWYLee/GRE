@@ -6,6 +6,7 @@ import {
   Check,
   ChevronLeft,
   ChevronRight,
+  ChevronsLeft,
   CircleHelp,
   Cloud,
   CloudOff,
@@ -30,9 +31,7 @@ import { Button } from './components/ui/button'
 import { AccountAccess, type ApprovedSession } from './AccountAccess'
 import { apiFetch } from './api-client'
 import { runAutoplayCard } from './autoplay'
-import moeMandarinAudio from './moe-mandarin-audio.json'
 import wikimediaEnglishAudio from './wikimedia-english-audio.json'
-import wikimediaMandarinAudio from './wikimedia-mandarin-audio.json'
 import {
   advanceQuiz,
   buildQuizOptions,
@@ -59,7 +58,7 @@ import './App.css'
 
 type StudyMode = 'all' | 'review' | 'known' | 'favorites'
 type PronunciationStatus = 'idle' | 'loading' | 'human-us' | 'human-other' | 'ai' | 'unavailable'
-type MandarinStatus = 'idle' | 'loading' | 'human-moe' | 'human-wikimedia' | 'mixed' | 'ai' | 'unavailable'
+type MandarinStatus = 'idle' | 'loading' | 'ai' | 'unavailable'
 type SequenceMode = 'fixed' | 'random'
 type CardMode = 'flashcard' | 'quiz'
 type SyncStatus = 'idle' | 'loading' | 'synced' | 'offline'
@@ -123,31 +122,14 @@ const AUTOPLAY_SECONDS_KEY = 'gre-roots-autoplay-seconds-v1'
 const MANDARIN_AUTOPLAY_KEY = 'gre-roots-mandarin-autoplay-v1'
 const AUTOPLAY_OPTIONS = [3, 5, 8, 10, 15, 20, 30] as const
 const PRONUNCIATION_LOOKAHEAD = 20
-const MANDARIN_LOOKAHEAD = 10
 const HUMAN_RECORDING_START_WAIT_MS = 2_500
 const SPEECH_COMPLETION_TIMEOUT_MS = 15_000
 const PAUSE_AFTER_SPEECH_MS = 1_000
+const SPEECH_VOLUME = 1
 const WIKIMEDIA_ENGLISH_RECORDINGS = wikimediaEnglishAudio.recordings as Record<string, {
   url: string
   accent: 'en-US' | 'en'
   accentLabel: string
-  filename: string
-  sourceUrl: string
-  artist: string
-  license: string
-  licenseUrl: string
-  note: string
-}>
-const MOE_MANDARIN_RECORDINGS = moeMandarinAudio.recordings as Record<string, {
-  entryId: string
-  url: string
-  bytes: number
-  sha256: string
-}>
-const WIKIMEDIA_MANDARIN_RECORDINGS = wikimediaMandarinAudio.recordings as Record<string, {
-  url: string
-  accentLabel: string
-  pinyin: string
   filename: string
   sourceUrl: string
   artist: string
@@ -218,37 +200,6 @@ function mandarinSpeechText(value: string) {
     .trim()
 }
 
-function mandarinSegments(value: string) {
-  return mandarinSpeechText(value)
-    .split(/[，。；、：！？（）\s]+/u)
-    .map((segment) => segment.trim())
-    .filter((segment) => /\p{Script=Han}/u.test(segment))
-}
-
-function mandarinPlaybackPlan(meaning: string) {
-  const moeRecording = MOE_MANDARIN_RECORDINGS[meaning]
-  if (moeRecording) {
-    return {
-      moeRecording,
-      segments: [{ text: meaning, recording: undefined }],
-      humanRecordings: [],
-      aiSegmentCount: 0,
-    }
-  }
-
-  const segments = mandarinSegments(meaning).map((text) => ({
-    text,
-    recording: WIKIMEDIA_MANDARIN_RECORDINGS[text],
-  }))
-  const humanRecordings = segments.filter((segment) => segment.recording)
-  return {
-    moeRecording: undefined,
-    segments,
-    humanRecordings,
-    aiSegmentCount: segments.length - humanRecordings.length,
-  }
-}
-
 function selectMandarinVoice(voices: SpeechSynthesisVoice[]) {
   const candidates = voices.filter((voice) => {
     const language = voice.lang.toLocaleLowerCase()
@@ -307,7 +258,6 @@ function StudyApp({
   const lastSyncedMemoryRef = useRef('')
   const syncRequestRef = useRef(0)
   const pronunciationPreloadRef = useRef(new Map<string, HTMLAudioElement>())
-  const mandarinPreloadRef = useRef(new Map<string, HTMLAudioElement>())
   const englishPlaybackRef = useRef<PlaybackEntry | null>(null)
   const mandarinPlaybackRef = useRef<PlaybackEntry | null>(null)
 
@@ -328,6 +278,7 @@ function StudyApp({
 
     const audio = new Audio(recording.url)
     audio.preload = 'auto'
+    audio.volume = SPEECH_VOLUME
     audio.load()
     pronunciationPreloadRef.current.set(key, audio)
 
@@ -338,30 +289,6 @@ function StudyApp({
       oldestAudio?.pause()
       oldestAudio?.removeAttribute('src')
       pronunciationPreloadRef.current.delete(oldestKey)
-    }
-  }, [])
-
-  const preloadMandarinRecording = useCallback((meaning: string) => {
-    const plan = mandarinPlaybackPlan(meaning)
-    const recordings = plan.moeRecording
-      ? [{ key: `moe:${meaning}`, url: plan.moeRecording.url }]
-      : plan.humanRecordings.map((segment) => ({ key: `wikimedia:${segment.text}`, url: segment.recording!.url }))
-
-    for (const recording of recordings) {
-      if (mandarinPreloadRef.current.has(recording.key)) continue
-      const audio = new Audio(recording.url)
-      audio.preload = 'auto'
-      audio.load()
-      mandarinPreloadRef.current.set(recording.key, audio)
-    }
-
-    while (mandarinPreloadRef.current.size > MANDARIN_LOOKAHEAD * 6) {
-      const oldestMeaning = mandarinPreloadRef.current.keys().next().value
-      if (typeof oldestMeaning !== 'string') break
-      const oldestAudio = mandarinPreloadRef.current.get(oldestMeaning)
-      oldestAudio?.pause()
-      oldestAudio?.removeAttribute('src')
-      mandarinPreloadRef.current.delete(oldestMeaning)
     }
   }, [])
 
@@ -398,6 +325,7 @@ function StudyApp({
       utterance.lang = 'en-US'
       utterance.rate = 0.88
       utterance.pitch = 1
+      utterance.volume = SPEECH_VOLUME
       utterance.onstart = () => {
         if (requestId === pronunciationRequestRef.current) setPronunciationStatus('ai')
       }
@@ -434,6 +362,7 @@ function StudyApp({
         const preloadedAudio = pronunciationPreloadRef.current.get(key)
         const audio = preloadedAudio ?? new Audio(recording.url)
         pronunciationPreloadRef.current.delete(key)
+        audio.volume = SPEECH_VOLUME
         audioRef.current = audio
         let settled = false
         const finish = (completed: boolean) => {
@@ -475,7 +404,7 @@ function StudyApp({
     return speakWithDevice(word, requestId)
   }, [speakWithDevice])
 
-  const speakMandarinWithDevice = useCallback((text: string, requestId: number, status: MandarinStatus = 'ai') => (
+  const speakMandarinWithDevice = useCallback((text: string, requestId: number) => (
     new Promise<boolean>((resolve) => {
       if (!('speechSynthesis' in window)) {
         if (requestId === mandarinRequestRef.current) setMandarinStatus('unavailable')
@@ -503,8 +432,9 @@ function StudyApp({
       utterance.voice = selectMandarinVoice(synth.getVoices())
       utterance.rate = 0.9
       utterance.pitch = 1
+      utterance.volume = SPEECH_VOLUME
       utterance.onstart = () => {
-        if (requestId === mandarinRequestRef.current) setMandarinStatus(status)
+        if (requestId === mandarinRequestRef.current) setMandarinStatus('ai')
       }
       utterance.onend = () => finish(true)
       utterance.onerror = (event) => {
@@ -513,57 +443,9 @@ function StudyApp({
         }
         finish(false)
       }
-      if (requestId === mandarinRequestRef.current) setMandarinStatus(status)
       synth.speak(utterance)
     })
   ), [])
-
-  const playMandarinHumanRecording = useCallback((
-    cacheKey: string,
-    url: string,
-    requestId: number,
-    status: MandarinStatus,
-  ) => new Promise<boolean>((resolve) => {
-    const preloadedAudio = mandarinPreloadRef.current.get(cacheKey)
-    const audio = preloadedAudio ?? new Audio(url)
-    mandarinPreloadRef.current.delete(cacheKey)
-    audioRef.current = audio
-    let settled = false
-    const finish = (played: boolean) => {
-      if (settled) return
-      settled = true
-      window.clearTimeout(startTimer)
-      window.clearTimeout(completionTimer)
-      audio.onplay = null
-      audio.onended = null
-      audio.onerror = null
-      audio.onpause = null
-      resolve(played)
-    }
-    const startTimer = window.setTimeout(() => {
-      audio.pause()
-      finish(false)
-    }, HUMAN_RECORDING_START_WAIT_MS)
-    const completionTimer = window.setTimeout(() => {
-      audio.pause()
-      finish(false)
-    }, SPEECH_COMPLETION_TIMEOUT_MS)
-    audio.onplay = () => {
-      window.clearTimeout(startTimer)
-      if (requestId !== mandarinRequestRef.current) {
-        audio.pause()
-        finish(false)
-        return
-      }
-      setMandarinStatus(status)
-    }
-    audio.onended = () => finish(true)
-    audio.onerror = () => finish(false)
-    audio.onpause = () => {
-      if (!audio.ended) finish(false)
-    }
-    void audio.play().catch(() => finish(false))
-  }), [])
 
   const speakMandarin = useCallback(async (meaning: string) => {
     const requestId = mandarinRequestRef.current + 1
@@ -581,49 +463,9 @@ function StudyApp({
       setMandarinStatus('unavailable')
       return false
     }
-
-    const plan = mandarinPlaybackPlan(meaning)
-    if (plan.moeRecording) {
-      setMandarinStatus('loading')
-      const played = await playMandarinHumanRecording(
-        `moe:${meaning}`,
-        plan.moeRecording.url,
-        requestId,
-        'human-moe',
-      )
-      if (requestId !== mandarinRequestRef.current) return false
-      return played || await speakMandarinWithDevice(text, requestId, 'ai')
-    }
-
-    if (!plan.humanRecordings.length) {
-      return speakMandarinWithDevice(text, requestId, 'ai')
-    }
-
     setMandarinStatus('loading')
-    let humanPlayed = 0
-    let aiPlayed = 0
-    const plannedStatus: MandarinStatus = plan.aiSegmentCount ? 'mixed' : 'human-wikimedia'
-    for (const segment of plan.segments) {
-      if (requestId !== mandarinRequestRef.current) return false
-      if (segment.recording) {
-        const played = await playMandarinHumanRecording(
-          `wikimedia:${segment.text}`,
-          segment.recording.url,
-          requestId,
-          plannedStatus,
-        )
-        if (played) {
-          humanPlayed += 1
-          continue
-        }
-      }
-      if (requestId !== mandarinRequestRef.current) return false
-      if (await speakMandarinWithDevice(segment.text, requestId, 'mixed')) aiPlayed += 1
-    }
-    if (requestId !== mandarinRequestRef.current) return false
-    setMandarinStatus(humanPlayed && aiPlayed ? 'mixed' : humanPlayed ? 'human-wikimedia' : 'ai')
-    return humanPlayed + aiPlayed > 0
-  }, [playMandarinHumanRecording, speakMandarinWithDevice])
+    return speakMandarinWithDevice(text, requestId)
+  }, [speakMandarinWithDevice])
 
   const startEnglishPlayback = useCallback((wordId: string, word: string) => {
     mandarinPlaybackRef.current = null
@@ -835,12 +677,7 @@ function StudyApp({
   useEffect(() => {
     if (!activeWord) return
     if ('speechSynthesis' in window) window.speechSynthesis.getVoices()
-    if (activeMeaningSections?.primary) preloadMandarinRecording(activeMeaningSections.primary)
-    const upcomingWords = studyWords.slice(cardIndex + 1, cardIndex + 1 + MANDARIN_LOOKAHEAD)
-    for (const word of upcomingWords) {
-      preloadMandarinRecording(splitMeaningSections(word.meaning).primary)
-    }
-  }, [activeMeaningSections, activeWord, cardIndex, preloadMandarinRecording, studyWords])
+  }, [activeWord])
 
   useEffect(() => stopPronunciation, [stopPronunciation])
 
@@ -1217,6 +1054,17 @@ function StudyApp({
     }
   }
 
+  const returnToFirstCard = () => {
+    if (!studyWords.length) return
+    stopPronunciation()
+    setAutoPlay(false)
+    setCardIndex(0)
+    setFlipped(false)
+    if (!dailyReview && !favoriteReview && cardMode === 'flashcard' && sequenceMode === 'fixed' && selectedPart !== null && studyMode === 'all' && rootFilter === 'all' && !query) {
+      setMemory((current) => setPosition(current, String(selectedPart), 0))
+    }
+  }
+
   const changeCardDuration = (seconds: number) => {
     setCardDuration(seconds)
     if (autoPlay) setFlipped(false)
@@ -1433,21 +1281,10 @@ function StudyApp({
     activeEnglishRecording
       ? `播放${activeEnglishRecording.accent === 'en-US' ? '美式' : activeEnglishRecording.accentLabel}真人發音`
       : '播放 AI／裝置合成發音'
-  const activeMandarinPlan = activeMeaningSections
-    ? mandarinPlaybackPlan(activeMeaningSections.primary)
-    : undefined
   const mandarinLabel =
-    mandarinStatus === 'human-moe' ? '教育部真人詞條錄音' :
-    mandarinStatus === 'human-wikimedia' ? '中文真人發音' :
-    mandarinStatus === 'mixed' ? '真人＋AI 中文發音' :
     mandarinStatus === 'ai' ? 'AI／裝置合成中文發音' :
-    mandarinStatus === 'loading' ? '載入中文真人發音' :
+    mandarinStatus === 'loading' ? '準備 AI 中文發音' :
     mandarinStatus === 'unavailable' ? '此裝置無法播放中文語音' :
-    activeMandarinPlan?.moeRecording ? '播放教育部真人詞條錄音' :
-    activeMandarinPlan?.humanRecordings.length && activeMandarinPlan.aiSegmentCount
-      ? '播放真人＋AI 中文發音' :
-    activeMandarinPlan?.humanRecordings.length
-      ? '播放中文真人發音' :
       '播放 AI／裝置合成中文發音'
 
   return (
@@ -1577,7 +1414,7 @@ function StudyApp({
               <Volume2 size={18} aria-hidden="true" />
               <span>
                 <strong>中文發音</strong>
-                <small>教育部真人詞條錄音優先，其餘使用裝置語音</small>
+                <small>全部使用 AI／裝置合成中文語音</small>
               </span>
               <b>{mandarinAutoplay ? '開' : '關'}</b>
             </button>
@@ -1752,32 +1589,7 @@ function StudyApp({
                       <Volume2 size={16} aria-hidden="true" />}
                     <span aria-live="polite">{mandarinLabel}</span>
                   </button>
-                  {activeMandarinPlan?.moeRecording ? (
-                    <p className="mandarin-source-note" onClick={(event) => event.stopPropagation()}>
-                      真人錄音來源：中華民國教育部《國語辭典簡編本》詞目全文聲音檔；原始錄音未修改。
-                      {' '}<a href={moeMandarinAudio.sourcePage} rel="noreferrer" target="_blank">資料來源</a>
-                      {' · '}<a href={moeMandarinAudio.usageNotice} rel="noreferrer" target="_blank">使用說明</a>
-                    </p>
-                  ) : activeMandarinPlan?.humanRecordings.length ? (
-                    <p className="mandarin-source-note" onClick={(event) => event.stopPropagation()}>
-                      真人錄音片段：{' '}
-                      {activeMandarinPlan.humanRecordings.map((segment, index) => {
-                        const recording = segment.recording!
-                        return (
-                          <span key={`${segment.text}-${recording.filename}`}>
-                            {index ? '；' : ''}{segment.text}（{recording.artist} · {recording.accentLabel} ·{' '}
-                            <a href={recording.sourceUrl} rel="noreferrer" target="_blank">來源</a>
-                            {' · '}<a href={recording.licenseUrl} rel="noreferrer" target="_blank">{recording.license}</a>）
-                          </span>
-                        )
-                      })}
-                      {activeMandarinPlan.aiSegmentCount
-                        ? `；其餘 ${activeMandarinPlan.aiSegmentCount} 個片段使用 AI／裝置合成語音。`
-                        : '。'}
-                    </p>
-                  ) : (
-                    <p className="mandarin-source-note">未找到授權清楚的真人錄音，使用 AI／裝置合成中文語音。</p>
-                  )}
+                  <p className="mandarin-source-note">中文一律使用此裝置提供的 AI／合成語音。</p>
                 </div>
                 {activeMeaningSections?.synonyms.length ? (
                   <div className="detail-block synonym-block">
@@ -1827,6 +1639,9 @@ function StudyApp({
             </div>
           ) : (
             <nav className="card-nav" aria-label="切換字卡">
+              <Button disabled={cardIndex === 0} onClick={returnToFirstCard} size="lg" variant="outline">
+                <ChevronsLeft size={18} /> 第一張
+              </Button>
               <Button disabled={cardIndex === 0} onClick={() => moveCard(-1)} size="lg" variant="outline">
                 <ChevronLeft size={18} /> 上一張
               </Button>

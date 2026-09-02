@@ -1,4 +1,6 @@
 import worker from '../sites-worker/index.js'
+import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
 
 const originalFetch = globalThis.fetch
 
@@ -56,7 +58,23 @@ try {
     throw new Error(`Pronunciation response is not browser-cacheable: ${response.headers.get('cache-control')}`)
   }
 
-  console.log(JSON.stringify({ valid: true, selected: 'US recording', browserCache: true }, null, 2))
+  const appSource = readFileSync(new URL('../src/App.tsx', import.meta.url), 'utf8')
+  assert.equal(appSource.includes('moeMandarinAudio'), false, 'Mandarin must not use MOE recordings')
+  assert.equal(appSource.includes('wikimediaMandarinAudio'), false, 'Mandarin must not use Wikimedia recordings')
+  assert.match(appSource, /const SPEECH_VOLUME = 1/)
+  assert.equal((appSource.match(/utterance\.volume = SPEECH_VOLUME/g) ?? []).length, 2)
+  assert.equal((appSource.match(/audio\.volume = SPEECH_VOLUME/g) ?? []).length >= 2, true)
+  assert.match(appSource, /const returnToFirstCard = \(\) =>/)
+  assert.match(appSource, /<ChevronsLeft size=\{18\} \/> 第一張/)
+
+  console.log(JSON.stringify({
+    valid: true,
+    selected: 'US recording',
+    browserCache: true,
+    mandarinAiOnly: true,
+    equalPlaybackVolume: true,
+    returnToFirstCard: true,
+  }, null, 2))
 } finally {
   globalThis.fetch = originalFetch
 }

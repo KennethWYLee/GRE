@@ -161,9 +161,8 @@
 .word-block .english-source-note, .quiz-prompt .english-source-note { margin: 10px auto 0; font-family: var(--sans); font-size: .6rem; line-height: 1.55; }
 .english-source-note a { color: inherit; font-weight: 800; text-underline-offset: 2px; }
 .mandarin-pronounce-button { display: inline-flex; min-height: 38px; align-items: center; gap: 7px; margin-top: 14px; padding: 0 13px; border: 1px solid var(--line-dark); background: transparent; color: var(--ink-soft); cursor: pointer; font-size: .68rem; font-weight: 800; }
-.mandarin-pronounce-button:hover, .mandarin-pronounce-button:focus-visible, .mandarin-pronounce-button.status-human-moe, .mandarin-pronounce-button.status-human-wikimedia { border-color: var(--green); background: var(--green); color: var(--card); outline: none; }
+.mandarin-pronounce-button:hover, .mandarin-pronounce-button:focus-visible { border-color: var(--green); background: var(--green); color: var(--card); outline: none; }
 .mandarin-pronounce-button.status-loading { border-color: var(--green); color: var(--green); }
-.mandarin-pronounce-button.status-mixed { border-color: var(--green); color: var(--green); }
 .mandarin-pronounce-button.status-ai { border-color: var(--muted); color: var(--muted); }
 .mandarin-pronounce-button.status-unavailable { border-color: var(--muted); color: var(--muted); }
 .mandarin-source-note { max-width: 36rem; margin: 10px 0 0; color: var(--muted); font-size: .62rem; line-height: 1.55; }
@@ -182,7 +181,7 @@
 .synonym-block p, .antonym-block p { font-family: var(--display); font-size: 1rem; }
 .memory-note-block p { color: var(--muted); }
 .example-block p { font-family: var(--display); font-size: 1rem; }
-.card-nav { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; padding-top: 22px; }
+.card-nav { display: grid; grid-template-columns: .9fr .9fr 1.2fr; gap: 8px; padding-top: 22px; }
 .recall-dot { display: inline-flex; align-items: center; gap: 5px; }
 .recall-dot::before { width: 6px; height: 6px; border-radius: 50%; background: var(--line-dark); content: ''; }
 .recall-again::before { background: #b8563f; }
