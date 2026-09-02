@@ -18,8 +18,11 @@
     "english:import": "node scripts/import-wikimedia-english-audio.mjs",
     "english:validate": "node scripts/validate-english-audio.mjs",
     "english:smoke": "node scripts/smoke-english-audio-live.mjs",
-    "mandarin:import": "python scripts/import-moe-mandarin-audio.py",
+    "mandarin:import": "pnpm run mandarin:import:moe && pnpm run mandarin:import:wikimedia",
+    "mandarin:import:moe": "python scripts/import-moe-mandarin-audio.py",
+    "mandarin:import:wikimedia": "node scripts/import-wikimedia-mandarin-audio.mjs",
     "mandarin:validate": "node scripts/validate-mandarin-audio.mjs",
+    "mandarin:smoke": "node scripts/smoke-mandarin-audio-live.mjs",
     "study:validate": "node scripts/validate-study.mjs",
     "check": "pnpm run lint && pnpm run data:validate && pnpm run migration:validate && pnpm run access:validate && pnpm run study:validate && pnpm run pronunciation:validate && pnpm run english:validate && pnpm run mandarin:validate && pnpm run build"
   },

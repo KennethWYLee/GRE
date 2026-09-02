@@ -1,0 +1,26 @@
+{
+  "title": "Chinese Wiktionary Mandarin pronunciation recordings hosted by Wikimedia Commons",
+  "retrievedOn": "2026-09-02",
+  "sourcePage": "https://zh.wiktionary.org/wiki/Wiktionary:%E6%BC%A2%E8%AA%9E%E7%99%BC%E9%9F%B3%E8%A1%A8%E8%A8%98",
+  "licensePolicy": "https://commons.wikimedia.org/wiki/Commons:Licensing",
+  "recordingCount": 205,
+  "taiwanRecordingCount": 0,
+  "otherMandarinRecordingCount": 205,
+  "categoryFilesScanned": 0,
+  "deckCoverage": {
+    "words1000": {
+      "uniqueMeanings": 1078,
+      "moeHumanMeanings": 26,
+      "wikimediaOnlyHumanMeanings": 7,
+      "mixedMeanings": 135,
+      "aiOnlyMeanings": 910
+    },
+    "words2000": {
+      "uniqueMeanings": 2057,
+      "moeHumanMeanings": 58,
+      "wikimediaOnlyHumanMeanings": 14,
+      "mixedMeanings": 239,
+      "aiOnlyMeanings": 1746
+    }
+  }
+}

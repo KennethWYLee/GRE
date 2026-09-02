@@ -12,9 +12,19 @@ const acceptedLicenses = new Set([
   'Public domain',
 ])
 const words = new Set()
-for (const relativePath of ['../data/vocabulary-1000.json', '../data/vocabulary.json']) {
+const deckWords = new Map()
+for (const [deckId, relativePath] of [
+  ['words1000', '../data/vocabulary-1000.json'],
+  ['words2000', '../data/vocabulary.json'],
+]) {
   const deck = JSON.parse(fs.readFileSync(new URL(relativePath, import.meta.url), 'utf8'))
-  for (const word of deck.words) words.add(word.word.trim().toLocaleLowerCase('en-US'))
+  const currentWords = new Set()
+  for (const word of deck.words) {
+    const key = word.word.trim().toLocaleLowerCase('en-US')
+    words.add(key)
+    currentWords.add(key)
+  }
+  deckWords.set(deckId, currentWords)
 }
 
 for (const [word, recording] of Object.entries(manifest.recordings)) {
@@ -36,6 +46,15 @@ if (!fs.existsSync(new URL('../public/audio/wikimedia/en/attribution.json', impo
   throw new Error('English recording attribution file is missing')
 }
 
+const deckCoverage = Object.fromEntries([...deckWords].map(([deckId, currentWords]) => {
+  const humanRecordings = [...currentWords].filter((word) => manifest.recordings[word]).length
+  return [deckId, {
+    uniqueWords: currentWords.size,
+    humanRecordings,
+    aiFallbackWords: currentWords.size - humanRecordings,
+  }]
+}))
+
 console.log(JSON.stringify({
   valid: true,
   uniqueGreWords: words.size,
@@ -43,4 +62,5 @@ console.log(JSON.stringify({
   usHumanRecordings: manifest.usRecordingCount,
   otherEnglishHumanRecordings: manifest.otherEnglishRecordingCount,
   aiFallbackWords: words.size - manifest.recordingCount,
+  deckCoverage,
 }, null, 2))
