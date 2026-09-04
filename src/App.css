@@ -78,6 +78,19 @@
 .part-arrow { position: absolute; right: 15px; top: 22px; }
 .part-card:hover .part-progress { background: color-mix(in srgb, var(--paper) 30%, transparent); }
 .part-card:hover .part-progress i { background: var(--paper); }
+.listening-progress-details { margin-top: 24px; border-top: 1px solid var(--line-dark); border-bottom: 1px solid var(--line-dark); }
+.listening-progress-details summary { display: grid; min-height: 50px; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; gap: 10px; padding: 0 4px; color: var(--ink); cursor: pointer; font-size: .76rem; font-weight: 800; list-style: none; }
+.listening-progress-details summary::-webkit-details-marker { display: none; }
+.listening-progress-details summary::after { color: var(--green); content: '+'; font-size: 1.1rem; }
+.listening-progress-details[open] summary::after { content: '−'; }
+.listening-progress-details summary small { color: var(--muted); font-size: .68rem; font-weight: 750; }
+.listening-progress-list { border-top: 1px solid var(--line); }
+.listening-progress-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px 14px; align-items: center; min-height: 58px; padding: 10px 4px; border-bottom: 1px solid var(--line); }
+.listening-progress-row:last-child { border-bottom: 0; }
+.listening-progress-row span, .listening-progress-row strong { font-size: .72rem; }
+.listening-progress-row strong { color: var(--green); }
+.listening-progress-row > i { grid-column: 1 / -1; height: 2px; overflow: hidden; background: var(--line); }
+.listening-progress-row > i > b { display: block; height: 100%; background: var(--green); }
 .study-shell { display: flex; max-width: 720px; flex-direction: column; padding: 0 max(18px, env(safe-area-inset-right)) max(26px, env(safe-area-inset-bottom)) max(18px, env(safe-area-inset-left)); }
 .study-header { min-height: 62px; }
 .study-title { display: flex; flex-direction: column; align-items: center; gap: 2px; }
@@ -167,6 +180,7 @@
 .memory-note-block p { color: var(--muted); }
 .example-block p { font-family: var(--display); font-size: 1rem; }
 .card-nav { display: grid; grid-template-columns: .9fr .9fr 1.2fr; gap: 8px; padding-top: 22px; }
+.listening-complete-summary { margin: 12px 0 0; padding: 10px 12px; border: 1px solid var(--line-dark); background: var(--card); color: var(--green); font-size: .72rem; font-weight: 800; text-align: center; }
 .recall-dot { display: inline-flex; align-items: center; gap: 5px; }
 .recall-dot::before { width: 6px; height: 6px; border-radius: 50%; background: var(--line-dark); content: ''; }
 .recall-again::before { background: #b8563f; }
@@ -332,6 +346,8 @@
   .part-meta { margin-right: 32px; font-size: .75rem; }
   .part-counts { right: 36px; bottom: 18px; font-size: .75rem; }
   .part-progress { right: 36px; bottom: 10px; left: 64px; }
+  .listening-progress-details summary { min-height: 48px; font-size: .75rem; }
+  .listening-progress-details summary small, .listening-progress-row span, .listening-progress-row strong { font-size: .75rem; }
   .study-shell { padding-right: max(14px, env(safe-area-inset-right)); padding-left: max(14px, env(safe-area-inset-left)); padding-bottom: max(22px, env(safe-area-inset-bottom)); }
   .study-header { min-height: 54px; }
   .study-title span, .study-title strong { font-size: .75rem; }
@@ -373,6 +389,7 @@
   .detail-block p, .synonym-block p, .antonym-block p, .example-block p { font-size: 1rem; }
   .card-nav { gap: 6px; padding-top: 14px; }
   .card-nav button { min-height: 48px; padding-inline: 6px; font-size: .75rem; }
+  .listening-complete-summary { font-size: .75rem; }
   .recall-actions { gap: 6px; padding-top: 16px; }
   .recall-actions button { min-height: 56px; gap: 5px; padding: 0 5px; }
   .recall-actions span { font-size: .75rem; }

@@ -10,6 +10,7 @@ import {
   mergeMemory,
   normalizeMemory,
   normalizeSpelling,
+  recordListeningCompletion,
   recordReview,
   setPosition,
   toggleFavorite,
@@ -59,6 +60,19 @@ assert.equal(concurrent.activity['2026-09-01'].reviews, 2)
 const favoriteRemoval = toggleFavorite(concurrent, 'shared-favorite', now + 400)
 assert.equal(mergeMemory(concurrent, favoriteRemoval).favorites['shared-favorite'], false)
 
+let listeningMemory = recordListeningCompletion(emptyMemory(), 'word-1', now + 500)
+assert.equal(listeningMemory.listeningCompletedAt['word-1'], now + 500)
+listeningMemory = recordListeningCompletion(listeningMemory, 'word-1', now + 600)
+assert.equal(listeningMemory.listeningCompletedAt['word-1'], now + 600)
+const mergedListening = mergeMemory(
+  recordListeningCompletion(emptyMemory(), 'local-word', now + 700),
+  recordListeningCompletion(emptyMemory(), 'remote-word', now + 800),
+)
+assert.equal(mergedListening.listeningCompletedAt['local-word'], now + 700)
+assert.equal(mergedListening.listeningCompletedAt['remote-word'], now + 800)
+const newerRemoteListening = recordListeningCompletion(emptyMemory(), 'local-word', now + 900)
+assert.equal(mergeMemory(mergedListening, newerRemoteListening).listeningCompletedAt['local-word'], now + 900)
+
 const migratedLegacy = normalizeMemory({
   version: 3,
   recall: {},
@@ -68,9 +82,10 @@ const migratedLegacy = normalizeMemory({
   activity: { '2026-08-31': { reviews: 4, known: 2, quizCorrect: 1, quizWrong: 1 } },
   updatedAt: now,
 })
-assert.equal(migratedLegacy.version, 4)
+assert.equal(migratedLegacy.version, 5)
 assert.equal(migratedLegacy.activity['2026-08-31'].reviews, 4)
 assert.equal(migratedLegacy.positionUpdatedAt['1'], now)
+assert.deepEqual(migratedLegacy.listeningCompletedAt, {})
 
 const quizWords = [
   { sourceNo: 1, word: 'abate', meaning: '減弱', root: 'bate 減少' },
@@ -158,6 +173,10 @@ assert.equal(appSource.includes('className="study-progress-summary"'), true)
 assert.equal(appSource.includes('className="study-options"'), true)
 assert.equal(appSource.includes('className="weak-roots-details"'), true)
 assert.equal(appSource.includes('resetPagePosition()'), true)
+assert.equal(appSource.includes('if (!played) return'), true)
+assert.equal(appSource.includes('recordListeningCompletion(current, wordId'), true)
+assert.equal(appSource.includes('className="listening-progress-details"'), true)
+assert.equal(appSource.includes('className="listening-complete-summary"'), true)
 
 console.log(JSON.stringify({
   valid: true,
@@ -174,4 +193,8 @@ console.log(JSON.stringify({
   compactMobileInterface: true,
   nonessentialCopyRemoved: true,
   mobileNavigationResetsScroll: true,
+  listeningProgress: true,
+  listeningCountsOnlySuccessfulPlayback: true,
+  listeningSyncMerge: true,
+  listeningUiStaysCollapsed: true,
 }, null, 2))

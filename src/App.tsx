@@ -43,6 +43,7 @@ import {
   mergeMemory,
   normalizeMemory,
   normalizeSpelling,
+  recordListeningCompletion,
   quizValue,
   recordReview,
   saveMemory,
@@ -236,6 +237,8 @@ function StudyApp({
   const [quizComplete, setQuizComplete] = useState(false)
   const [sessionReviewedIds, setSessionReviewedIds] = useState<string[]>([])
   const [roundComplete, setRoundComplete] = useState(false)
+  const [sessionListenedIds, setSessionListenedIds] = useState<string[]>([])
+  const [listeningComplete, setListeningComplete] = useState(false)
   const [error, setError] = useState('')
   const [pronunciationStatus, setPronunciationStatus] = useState<PronunciationStatus>('idle')
   const [mandarinStatus, setMandarinStatus] = useState<MandarinStatus>('idle')
@@ -383,7 +386,13 @@ function StudyApp({
     const entry: PlaybackEntry = { wordId, promise, completed: false }
     englishPlaybackRef.current = entry
     void promise.then(
-      () => { entry.completed = true },
+      (played) => {
+        entry.completed = true
+        if (!played) return
+        const completedAt = Date.now()
+        setMemory((current) => recordListeningCompletion(current, wordId, completedAt))
+        setSessionListenedIds((current) => current.includes(wordId) ? current : [...current, wordId])
+      },
       () => { entry.completed = true },
     )
     return entry
@@ -636,6 +645,7 @@ function StudyApp({
       if (cardIndex >= studyWords.length - 1) {
         setAutoPlay(false)
         setFlipped(true)
+        setListeningComplete(true)
         return
       }
 
@@ -684,6 +694,9 @@ function StudyApp({
   const knownCountForPart = (part: number) =>
     data?.words.filter((word) => word.part === part && memory.recall[word.id] === 'known').length ?? 0
 
+  const listenedCountForPart = (part: number) =>
+    data?.words.filter((word) => word.part === part && memory.listeningCompletedAt[word.id]).length ?? 0
+
   const totalFavorites = Object.values(memory.favorites).filter(Boolean).length
   const streak = calculateStreak(memory)
   const todayActivity = memory.activity[localDateKey()] ??
@@ -710,6 +723,7 @@ function StudyApp({
     setQuizFeedback(null)
     setQuizComplete(false)
     setRoundComplete(false)
+    setListeningComplete(false)
   }
 
   const resetPagePosition = () => {
@@ -728,6 +742,7 @@ function StudyApp({
     setShuffleOrder([])
     setCardIndex(0)
     setFlipped(false)
+    setSessionListenedIds([])
     setMemory(loadMemory(deckId))
     setSyncReady(false)
     setSyncStatus('loading')
@@ -745,6 +760,7 @@ function StudyApp({
     setCardIndex(0)
     setFlipped(false)
     setSessionReviewedIds([])
+    setSessionListenedIds([])
     resetQuiz()
     resetPagePosition()
   }
@@ -764,6 +780,7 @@ function StudyApp({
     setCardIndex(sequenceMode === 'fixed' ? Math.max(0, memory.positions[String(part)] ?? 0) : 0)
     setFlipped(false)
     setSessionReviewedIds([])
+    setSessionListenedIds([])
     resetQuiz()
     resetPagePosition()
   }
@@ -783,6 +800,7 @@ function StudyApp({
     setCardIndex(0)
     setFlipped(false)
     setSessionReviewedIds([])
+    setSessionListenedIds([])
     resetQuiz()
     resetPagePosition()
   }
@@ -802,6 +820,7 @@ function StudyApp({
     setCardIndex(0)
     setFlipped(false)
     setSessionReviewedIds([])
+    setSessionListenedIds([])
     resetQuiz()
   }
 
@@ -809,6 +828,7 @@ function StudyApp({
     if (!studyWords.length) return
     unlockAudio()
     const next = Math.min(Math.max(cardIndex + direction, 0), studyWords.length - 1)
+    setListeningComplete(false)
     setCardIndex(next)
     setFlipped(false)
     if (!dailyReview && !favoriteReview && cardMode === 'flashcard' && sequenceMode === 'fixed' && selectedPart !== null && studyMode === 'all' && rootFilter === 'all' && !query) {
@@ -867,6 +887,7 @@ function StudyApp({
     setDailyReview(false)
     setDailyReviewIds([])
     setFavoriteReview(false)
+    setSessionListenedIds([])
     resetQuiz()
     resetPagePosition()
   }
@@ -883,6 +904,7 @@ function StudyApp({
     setShuffleOrder([])
     setCardIndex(0)
     setFlipped(false)
+    setSessionListenedIds([])
     setError('')
     setSyncReady(false)
     setSyncStatus('idle')
@@ -942,6 +964,7 @@ function StudyApp({
   const toggleAutoPlay = () => {
     unlockAudio()
     stopPronunciation()
+    setListeningComplete(false)
     if (autoPlay) {
       setAutoPlay(false)
       return
@@ -966,6 +989,7 @@ function StudyApp({
     if (!studyWords.length) return
     stopPronunciation()
     setAutoPlay(false)
+    setListeningComplete(false)
     setCardIndex(0)
     setFlipped(false)
     if (!dailyReview && !favoriteReview && cardMode === 'flashcard' && sequenceMode === 'fixed' && selectedPart !== null && studyMode === 'all' && rootFilter === 'all' && !query) {
@@ -1061,6 +1085,7 @@ function StudyApp({
   if (selectedPart === null) {
     const totalKnown = Object.values(memory.recall).filter((recall) => recall === 'known').length
     const totalRemaining = data.meta.totalWords - totalKnown
+    const totalListened = data.words.filter((word) => memory.listeningCompletedAt[word.id]).length
     return (
       <main className="app-shell home-shell">
         <header className="brand-bar">
@@ -1157,6 +1182,26 @@ function StudyApp({
             })}
           </div>
         </section>
+
+        <details className="listening-progress-details">
+          <summary>
+            <span>查看聆聽進度</span>
+            <small>已聽 {totalListened.toLocaleString()} / {data.meta.totalWords.toLocaleString()}</small>
+          </summary>
+          <div className="listening-progress-list">
+            {data.parts.map((part) => {
+              const listened = listenedCountForPart(part.id)
+              const percent = Math.round((listened / part.totalWordCount) * 100)
+              return (
+                <div className="listening-progress-row" key={part.id}>
+                  <span>第 {part.id} 份</span>
+                  <strong>已聽 {listened} / {part.totalWordCount}</strong>
+                  <i aria-hidden="true"><b style={{ width: `${percent}%` }} /></i>
+                </div>
+              )
+            })}
+          </div>
+        </details>
       </main>
     )
   }
@@ -1508,6 +1553,12 @@ function StudyApp({
                 查看答案 <ChevronRight size={18} />
               </Button>
             </nav>
+          )}
+          {listeningComplete && (
+            <p className="listening-complete-summary" role="status" aria-live="polite">
+              本次聽完 {sessionListenedIds.length} 字
+              {selectedPart > 0 && ` · 本份累計已聽 ${listenedCountForPart(selectedPart)} / ${partTotal}`}
+            </p>
           )}
         </section>
       )) : (

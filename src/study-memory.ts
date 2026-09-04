@@ -24,7 +24,7 @@ export type ActivityDay = {
 }
 
 export type MemoryStore = {
-  version: 4
+  version: 5
   recall: Record<string, RecallState>
   positions: Record<string, number>
   positionUpdatedAt: Record<string, number>
@@ -33,6 +33,7 @@ export type MemoryStore = {
   favoriteUpdatedAt: Record<string, number>
   activity: Record<string, ActivityDay>
   activityDevices: Record<string, Record<string, ActivityDay>>
+  listeningCompletedAt: Record<string, number>
   updatedAt: number
 }
 
@@ -44,7 +45,7 @@ let fallbackDeviceId = ''
 
 export function emptyMemory(): MemoryStore {
   return {
-    version: 4,
+    version: 5,
     recall: {},
     positions: {},
     positionUpdatedAt: {},
@@ -53,6 +54,7 @@ export function emptyMemory(): MemoryStore {
     favoriteUpdatedAt: {},
     activity: {},
     activityDevices: {},
+    listeningCompletedAt: {},
     updatedAt: 0,
   }
 }
@@ -73,6 +75,9 @@ export function normalizeMemory(value: unknown): MemoryStore {
   const rawActivityDevices = isRecord(value.activityDevices)
     ? value.activityDevices as Record<string, Record<string, ActivityDay>>
     : {}
+  const rawListeningCompletedAt = isRecord(value.listeningCompletedAt)
+    ? value.listeningCompletedAt
+    : {}
   const updatedAt = Number(value.updatedAt)
   const safeUpdatedAt = Number.isFinite(updatedAt) && updatedAt >= 0 ? updatedAt : 0
   const positionUpdatedAt = Object.fromEntries(
@@ -86,8 +91,13 @@ export function normalizeMemory(value: unknown): MemoryStore {
     : Object.keys(legacyActivity).length
       ? { legacy: normalizeActivity(legacyActivity) }
       : {}
+  const listeningCompletedAt = Object.fromEntries(
+    Object.entries(rawListeningCompletedAt)
+      .map(([wordId, timestamp]) => [wordId, safeTimestamp(timestamp, 0)] as const)
+      .filter(([, timestamp]) => timestamp > 0),
+  )
   return {
-    version: 4,
+    version: 5,
     recall,
     positions,
     positionUpdatedAt,
@@ -96,6 +106,7 @@ export function normalizeMemory(value: unknown): MemoryStore {
     favoriteUpdatedAt,
     activity: aggregateActivity(activityDevices),
     activityDevices,
+    listeningCompletedAt,
     updatedAt: safeUpdatedAt,
   }
 }
@@ -168,8 +179,18 @@ export function mergeMemory(local: MemoryStore, remote: unknown): MemoryStore {
   }
 
   const activityDevices = mergeActivityDevices(normalizedLocal.activityDevices, normalizedRemote.activityDevices)
+  const listeningCompletedAt: Record<string, number> = {}
+  for (const wordId of new Set([
+    ...Object.keys(normalizedLocal.listeningCompletedAt),
+    ...Object.keys(normalizedRemote.listeningCompletedAt),
+  ])) {
+    listeningCompletedAt[wordId] = Math.max(
+      normalizedLocal.listeningCompletedAt[wordId] ?? 0,
+      normalizedRemote.listeningCompletedAt[wordId] ?? 0,
+    )
+  }
   return {
-    version: 4,
+    version: 5,
     recall,
     positions,
     positionUpdatedAt,
@@ -178,6 +199,7 @@ export function mergeMemory(local: MemoryStore, remote: unknown): MemoryStore {
     favoriteUpdatedAt,
     activity: aggregateActivity(activityDevices),
     activityDevices,
+    listeningCompletedAt,
     updatedAt: Math.max(normalizedLocal.updatedAt, normalizedRemote.updatedAt),
   }
 }
@@ -204,6 +226,17 @@ export function setPosition(memory: MemoryStore, partId: string, position: numbe
     positions: { ...memory.positions, [partId]: position },
     positionUpdatedAt: { ...memory.positionUpdatedAt, [partId]: now },
     updatedAt: now,
+  }
+}
+
+export function recordListeningCompletion(memory: MemoryStore, wordId: string, now = Date.now()): MemoryStore {
+  return {
+    ...memory,
+    listeningCompletedAt: {
+      ...memory.listeningCompletedAt,
+      [wordId]: Math.max(memory.listeningCompletedAt[wordId] ?? 0, now),
+    },
+    updatedAt: Math.max(memory.updatedAt, now),
   }
 }
 
