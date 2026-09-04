@@ -712,6 +712,10 @@ function StudyApp({
     setRoundComplete(false)
   }
 
+  const resetPagePosition = () => {
+    window.requestAnimationFrame(() => window.scrollTo({ top: 0, left: 0, behavior: 'auto' }))
+  }
+
   const chooseDeck = (deckId: DeckId) => {
     stopPronunciation()
     setAutoPlay(false)
@@ -729,6 +733,7 @@ function StudyApp({
     setSyncStatus('loading')
     resetQuiz()
     setSelectedDeck(deckId)
+    resetPagePosition()
   }
 
   const applySequenceMode = (mode: SequenceMode) => {
@@ -741,6 +746,7 @@ function StudyApp({
     setFlipped(false)
     setSessionReviewedIds([])
     resetQuiz()
+    resetPagePosition()
   }
 
   const openPart = (part: number) => {
@@ -759,6 +765,7 @@ function StudyApp({
     setFlipped(false)
     setSessionReviewedIds([])
     resetQuiz()
+    resetPagePosition()
   }
 
   const openDailyReview = () => {
@@ -777,6 +784,7 @@ function StudyApp({
     setFlipped(false)
     setSessionReviewedIds([])
     resetQuiz()
+    resetPagePosition()
   }
 
   const openFavorites = () => {
@@ -860,6 +868,7 @@ function StudyApp({
     setDailyReviewIds([])
     setFavoriteReview(false)
     resetQuiz()
+    resetPagePosition()
   }
 
   const changeDeck = () => {
@@ -878,6 +887,7 @@ function StudyApp({
     setSyncReady(false)
     setSyncStatus('idle')
     resetQuiz()
+    resetPagePosition()
   }
 
   const startQuiz = (kind: QuizKind) => {
@@ -1009,9 +1019,7 @@ function StudyApp({
         </header>
 
         <section className="intro deck-intro">
-          <p className="eyebrow">CHOOSE A WORD BOOK</p>
           <h1>今天要念<br />1000 字，還是 2000 字？</h1>
-          <p className="intro-copy">兩套單字書分開記錄進度；選好後，再決定要依字根固定排列或隨機出題。</p>
         </section>
 
         <section className="deck-choice-grid" aria-label="選擇單字書">
@@ -1020,7 +1028,6 @@ function StudyApp({
             const known = Object.values(deckMemory.recall).filter((recall) => recall === 'known').length
             return (
               <button className="deck-choice-card" key={option.id} onClick={() => chooseDeck(option.id)} type="button">
-                <span className="deck-choice-label">WORD BOOK</span>
                 <strong>{option.title}</strong>
                 <span>{option.description}</span>
                 <small>已背 {known.toLocaleString()} · 剩 {(option.count - known).toLocaleString()}</small>
@@ -1081,9 +1088,9 @@ function StudyApp({
 
         <section className="intro">
           <p className="eyebrow">{data.meta.title}</p>
-          <h1>選一份，開始把字<br />連成有意義的家族。</h1>
+          <h1>選一份，開始背單字。</h1>
           <p className="intro-copy">
-            全部 {data.meta.totalWords.toLocaleString()} 張字卡分成五份；同字根不拆散。學習進度會跟著登入帳號跨裝置同步。
+            共 {data.meta.totalWords.toLocaleString()} 字，分成五份；同字根不拆散。
           </p>
         </section>
 
@@ -1091,9 +1098,8 @@ function StudyApp({
           <button className="daily-review-card" disabled={dueIds.size === 0} onClick={openDailyReview} type="button">
             <span className="dashboard-icon"><Brain size={22} /></span>
             <span>
-              <small>SPACED REVIEW</small>
               <strong id="daily-review-heading">今天待複習 {dueIds.size} 字</strong>
-              <em>{dueIds.size ? '依照你的記憶程度安排，現在開始複習' : '今天已完成；繼續背新字就會建立複習排程'}</em>
+              <em>{dueIds.size ? '現在開始' : '今天已完成'}</em>
             </span>
             <ChevronRight size={20} />
           </button>
@@ -1102,17 +1108,18 @@ function StudyApp({
             <div><Flame size={17} /><span>連續學習</span><strong>{streak}</strong><small>天</small></div>
             <button disabled={totalFavorites === 0} onClick={openFavorites} type="button"><Star size={17} /><span>收藏難字</span><strong>{totalFavorites}</strong><small>字</small></button>
           </div>
-          <div className="weak-roots">
-            <span>需要加強的字根</span>
-            {weakRoots.length ? weakRoots.map((root) => (
-              <small key={root.root}>{root.root} · {root.difficult} 字</small>
-            )) : <small>完成幾張字卡後，這裡會找出最弱的字根</small>}
-          </div>
+          <details className="weak-roots-details">
+            <summary>查看需要加強的字根</summary>
+            <div className="weak-roots">
+              {weakRoots.length ? weakRoots.map((root) => (
+                <small key={root.root}>{root.root} · {root.difficult} 字</small>
+              )) : <small>完成幾張字卡後，這裡會找出最弱的字根</small>}
+            </div>
+          </details>
         </section>
 
         <section className="sequence-picker" aria-labelledby="sequence-heading">
           <div className="sequence-copy">
-            <p className="section-kicker">WORD ORDER</p>
             <h2 id="sequence-heading">單字要怎麼出現？</h2>
           </div>
           <div className="sequence-options">
@@ -1128,10 +1135,8 @@ function StudyApp({
         <section className="part-section" aria-labelledby="part-heading">
           <div className="section-heading">
             <div>
-              <p className="section-kicker">TODAY'S DECK</p>
               <h2 id="part-heading">今天想背哪一份？</h2>
             </div>
-            <p>進度會同步至目前登入帳號</p>
           </div>
 
           <div className="part-grid">
@@ -1143,10 +1148,9 @@ function StudyApp({
                 <button className="part-card" key={part.id} onClick={() => openPart(part.id)} type="button">
                   <span className="part-number">0{part.id}</span>
                   <span className="part-title">第 {part.id} 份</span>
-                  <span className="part-meta">{part.rootGroupCount} 字根 · {part.totalWordCount} 字</span>
+                  <span className="part-meta">{part.totalWordCount} 字</span>
                   <span className="part-counts">已背 {known} · 剩 {remaining}</span>
                   <span className="part-progress"><i style={{ width: `${percent}%` }} /></span>
-                  <span className="part-known">{percent}%</span>
                   <span className="part-arrow"><ChevronRight size={18} /></span>
                 </button>
               )
@@ -1165,18 +1169,15 @@ function StudyApp({
       : knownCountForPart(selectedPart)
   const partTotal = dailyReview ? dailyReviewIds.length : favoriteReview ? partWords.length : partSummary?.totalWordCount ?? 0
   const partRemaining = partTotal - partKnown
-  const partKnownPercent = partTotal ? Math.round((partKnown / partTotal) * 100) : 0
   const currentRecall = activeWord ? memory.recall[activeWord.id] : undefined
   const pronunciationLabel =
-    pronunciationStatus === 'ai' ? '高品質 AI 英文發音' :
-    pronunciationStatus === 'loading' ? '準備 AI 英文發音' :
-    pronunciationStatus === 'unavailable' ? '重新播放發音' :
-      '播放高品質 AI 英文發音'
+    pronunciationStatus === 'loading' ? '準備中' :
+    pronunciationStatus === 'unavailable' ? '再試一次' :
+      '英文發音'
   const mandarinLabel =
-    mandarinStatus === 'ai' ? 'AI／裝置合成中文發音' :
-    mandarinStatus === 'loading' ? '準備 AI 中文發音' :
-    mandarinStatus === 'unavailable' ? '此裝置無法播放中文語音' :
-      '播放 AI／裝置合成中文發音'
+    mandarinStatus === 'loading' ? '準備中' :
+    mandarinStatus === 'unavailable' ? '再試一次' :
+      '中文發音'
 
   return (
     <main className="app-shell study-shell">
@@ -1199,27 +1200,10 @@ function StudyApp({
         <span style={{ width: studyWords.length ? `${Math.min(100, ((cardIndex + 1) / studyWords.length) * 100)}%` : quizComplete ? '100%' : '0%' }} />
       </div>
 
-      <section className="memory-progress" aria-labelledby="memory-progress-heading">
-        <div className="memory-progress-heading">
-          <span id="memory-progress-heading">{dailyReview ? '今日複習進度' : favoriteReview ? '收藏熟悉度' : '本份背誦進度'}</span>
-          <strong>{partKnownPercent}%</strong>
-        </div>
-        <div className="memory-progress-track" aria-hidden="true">
-          <span style={{ width: `${partKnownPercent}%` }} />
-        </div>
-        <table className="memory-progress-table">
-          <thead>
-            <tr><th scope="col">{dailyReview ? '已複習' : '已背'}</th><th scope="col">還剩</th><th scope="col">全部</th></tr>
-          </thead>
-          <tbody>
-            <tr>
-              <td><strong>{partKnown}</strong><span> 字</span></td>
-              <td><strong>{partRemaining}</strong><span> 字</span></td>
-              <td><strong>{partTotal}</strong><span> 字</span></td>
-            </tr>
-          </tbody>
-        </table>
-      </section>
+      <div className="study-progress-summary" aria-label={dailyReview ? '今日複習進度' : favoriteReview ? '收藏熟悉度' : '本份背誦進度'}>
+        <span>{dailyReview ? '今日複習' : favoriteReview ? '收藏熟悉度' : '本份進度'}</span>
+        <strong>{dailyReview ? '已複習' : '已背'} {partKnown} · 剩 {partRemaining}</strong>
+      </div>
 
       <section className="study-toolbar" aria-label="篩選字卡">
         <div className="practice-tabs" aria-label="學習方式">
@@ -1236,47 +1220,52 @@ function StudyApp({
             <Keyboard size={15} /><span>拼字</span>
           </button>
         </div>
-        <div className="study-sequence-tabs" aria-label="單字順序">
-          <button aria-pressed={sequenceMode === 'fixed'} className={sequenceMode === 'fixed' ? 'is-active' : ''} onClick={() => applySequenceMode('fixed')} type="button">
-            固定 · 同字根連續
-          </button>
-          <button aria-pressed={sequenceMode === 'random'} className={sequenceMode === 'random' ? 'is-active' : ''} onClick={() => applySequenceMode('random')} type="button">
-            隨機 · 全部打散
-          </button>
-        </div>
-        <div className="mode-tabs">
-          {([
-            ['all', '全部'],
-            ['review', '待複習'],
-            ['known', '已記住'],
-            ['favorites', '收藏'],
-          ] as const).map(([mode, label]) => (
-            <button className={studyMode === mode ? 'is-active' : ''} key={mode} onClick={() => applyMode(mode)} type="button">
-              {label}
-            </button>
-          ))}
-        </div>
-        <div className="filter-row">
-          <label className="search-box">
-            <Search size={16} aria-hidden="true" />
-            <input
-              aria-label="搜尋單字、字根或意思"
-              onChange={(event) => { setAutoPlay(false); setQuery(event.target.value); setCardIndex(0); setFlipped(false); resetQuiz() }}
-              placeholder="搜尋單字或意思"
-              value={query}
-            />
-            {query && (
-              <button aria-label="清除搜尋" onClick={() => { setAutoPlay(false); setQuery(''); resetQuiz() }} type="button"><X size={15} /></button>
-            )}
-          </label>
-          <select aria-label="選擇字根家族" onChange={(event) => applyRoot(event.target.value)} value={rootFilter}>
-            <option value="all">全部字根</option>
-            {rootsForPart.map((group) => (
-              <option key={group.rootNo} value={group.rootNo}>#{group.rootNo} · {group.root}</option>
-            ))}
-            <option value="S">S · 無字根（{partWords.filter((word) => word.root === 'S').length}）</option>
-          </select>
-        </div>
+        <details className="study-options">
+          <summary>篩選與順序</summary>
+          <div className="study-options-content">
+            <div className="study-sequence-tabs" aria-label="單字順序">
+              <button aria-pressed={sequenceMode === 'fixed'} className={sequenceMode === 'fixed' ? 'is-active' : ''} onClick={() => applySequenceMode('fixed')} type="button">
+                固定 · 同字根連續
+              </button>
+              <button aria-pressed={sequenceMode === 'random'} className={sequenceMode === 'random' ? 'is-active' : ''} onClick={() => applySequenceMode('random')} type="button">
+                隨機 · 全部打散
+              </button>
+            </div>
+            <div className="mode-tabs">
+              {([
+                ['all', '全部'],
+                ['review', '待複習'],
+                ['known', '已記住'],
+                ['favorites', '收藏'],
+              ] as const).map(([mode, label]) => (
+                <button className={studyMode === mode ? 'is-active' : ''} key={mode} onClick={() => applyMode(mode)} type="button">
+                  {label}
+                </button>
+              ))}
+            </div>
+            <div className="filter-row">
+              <label className="search-box">
+                <Search size={16} aria-hidden="true" />
+                <input
+                  aria-label="搜尋單字、字根或意思"
+                  onChange={(event) => { setAutoPlay(false); setQuery(event.target.value); setCardIndex(0); setFlipped(false); resetQuiz() }}
+                  placeholder="搜尋單字或意思"
+                  value={query}
+                />
+                {query && (
+                  <button aria-label="清除搜尋" onClick={() => { setAutoPlay(false); setQuery(''); resetQuiz() }} type="button"><X size={15} /></button>
+                )}
+              </label>
+              <select aria-label="選擇字根家族" onChange={(event) => applyRoot(event.target.value)} value={rootFilter}>
+                <option value="all">全部字根</option>
+                {rootsForPart.map((group) => (
+                  <option key={group.rootNo} value={group.rootNo}>#{group.rootNo} · {group.root}</option>
+                ))}
+                <option value="S">S · 無字根（{partWords.filter((word) => word.root === 'S').length}）</option>
+              </select>
+            </div>
+          </div>
+        </details>
         {cardMode === 'flashcard' && <div className={`autoplay-panel ${autoPlay ? 'is-playing' : ''}`}>
           <button aria-pressed={autoPlay} className="autoplay-toggle" onClick={toggleAutoPlay} type="button">
             {autoPlay ? <Pause size={18} /> : <Play size={18} />}
@@ -1303,10 +1292,7 @@ function StudyApp({
           <div className={`mandarin-audio-panel ${mandarinAutoplay ? 'is-enabled' : ''}`}>
             <button aria-pressed={mandarinAutoplay} onClick={toggleMandarinAutoplay} type="button">
               <Volume2 size={18} aria-hidden="true" />
-              <span>
-                <strong>中文發音</strong>
-                <small>全部使用 AI／裝置合成中文語音</small>
-              </span>
+              <strong>中文發音</strong>
               <b>{mandarinAutoplay ? '開' : '關'}</b>
             </button>
           </div>
@@ -1352,7 +1338,6 @@ function StudyApp({
                   {pronunciationStatus === 'loading' ? <LoaderCircle className="pronounce-spinner" size={17} /> : <Volume2 size={17} />}
                   再聽一次發音
                 </button>
-                <p className="english-source-note">優先使用此裝置可用的 Natural／Neural 高品質美式英語合成語音。</p>
               </div>
             ) : (
               <div className="quiz-prompt">
@@ -1415,7 +1400,7 @@ function StudyApp({
                       <Star fill={memory.favorites[activeWord.id] ? 'currentColor' : 'none'} size={16} />
                     </button>
                     <span className={`recall-dot recall-${currentRecall ?? 'new'}`}>
-                      {currentRecall === 'known' ? '已記住' : currentRecall === 'hard' ? '模糊' : currentRecall === 'again' ? '待複習' : `FREQ ${activeWord.frequency}`}
+                      {currentRecall === 'known' ? '已記住' : currentRecall === 'hard' ? '模糊' : currentRecall === 'again' ? '待複習' : '新單字'}
                     </span>
                   </span>
                 </div>
@@ -1423,7 +1408,7 @@ function StudyApp({
                   <h2>{activeWord.word}</h2>
                   {activeWord.pronunciation && <p>/{activeWord.pronunciation}/</p>}
                   <button
-                    aria-label={`重播 ${activeWord.word} 的高品質 AI 英文發音`}
+                    aria-label={`播放 ${activeWord.word} 的英文發音`}
                     className={`pronounce-button status-${pronunciationStatus}`}
                     onClick={(event) => {
                       event.stopPropagation()
@@ -1437,7 +1422,6 @@ function StudyApp({
                       <Volume2 size={17} />}
                     <span aria-live="polite">{pronunciationLabel}</span>
                   </button>
-                  <p className="english-source-note">優先使用此裝置可用的 Natural／Neural 高品質美式英語合成語音。</p>
                 </div>
                 <p className="flip-hint"><RotateCcw size={14} /> 輕觸翻面 · 左右滑動換字</p>
               </div>
@@ -1451,6 +1435,7 @@ function StudyApp({
                   <span>中文意思</span>
                   <h2>{activeMeaningSections?.primary ?? activeWord.meaning}</h2>
                   <button
+                    aria-label="播放中文發音"
                     className={`mandarin-pronounce-button status-${mandarinStatus}`}
                     onClick={(event) => {
                       event.stopPropagation()
@@ -1464,7 +1449,6 @@ function StudyApp({
                       <Volume2 size={16} aria-hidden="true" />}
                     <span aria-live="polite">{mandarinLabel}</span>
                   </button>
-                  <p className="mandarin-source-note">中文一律使用此裝置提供的 AI／合成語音。</p>
                 </div>
                 {activeMeaningSections?.synonyms.length ? (
                   <div className="detail-block synonym-block">

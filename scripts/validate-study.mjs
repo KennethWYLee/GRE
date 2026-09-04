@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
 import { runAutoplayCard } from '../src/autoplay.ts'
 import {
   advanceQuiz,
@@ -136,6 +137,28 @@ const canceledAdvance = await runAutoplayCard({
 assert.equal(canceledAdvance, false)
 assert.equal(meaningShownAfterCancel, false)
 
+const appSource = readFileSync(new URL('../src/App.tsx', import.meta.url), 'utf8')
+for (const removedText of [
+  'CHOOSE A WORD BOOK',
+  'WORD BOOK',
+  'SPACED REVIEW',
+  'WORD ORDER',
+  "TODAY'S DECK",
+  'Natural／Neural 高品質美式英語合成語音',
+  '中文一律使用此裝置提供的 AI／合成語音',
+  '全部使用 AI／裝置合成中文語音',
+  '進度會同步至目前登入帳號',
+  '高品質 AI 英文發音',
+  'AI／裝置合成中文發音',
+  '`FREQ ${activeWord.frequency}`',
+]) {
+  assert.equal(appSource.includes(removedText), false, `介面仍包含應移除文字：${removedText}`)
+}
+assert.equal(appSource.includes('className="study-progress-summary"'), true)
+assert.equal(appSource.includes('className="study-options"'), true)
+assert.equal(appSource.includes('className="weak-roots-details"'), true)
+assert.equal(appSource.includes('resetPagePosition()'), true)
+
 console.log(JSON.stringify({
   valid: true,
   spacedReview: true,
@@ -148,4 +171,7 @@ console.log(JSON.stringify({
   autoplayWaitsForSpeech: true,
   autoplayMinimumDuration: true,
   autoplayCancellation: true,
+  compactMobileInterface: true,
+  nonessentialCopyRemoved: true,
+  mobileNavigationResetsScroll: true,
 }, null, 2))
