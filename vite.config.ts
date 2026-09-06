@@ -6,7 +6,7 @@ import tailwindcss from '@tailwindcss/vite'
 import { defineConfig } from 'vite'
 
 const DEV_ADMIN_EMAIL = 'wy.lee@ntub.edu.tw'
-const localProgress = new Map<string, unknown>()
+const localProgress = new Map<string, { progress: unknown; revision: number }>()
 
 function localAccessApi() {
   return {
@@ -47,16 +47,29 @@ function localAccessApi() {
         if (requestUrl.pathname === '/api/progress' && approved) {
           const deckId = requestUrl.searchParams.get('deck') ?? 'words2000'
           response.setHeader('content-type', 'application/json; charset=utf-8')
+          const expectedEmail = request.headers['x-gre-account-email']
+          if (expectedEmail && expectedEmail !== DEV_ADMIN_EMAIL) {
+            response.statusCode = 403
+            response.end(JSON.stringify({ error: 'account_changed' }))
+            return
+          }
+          const current = localProgress.get(deckId) ?? { progress: null, revision: 0 }
           if (request.method === 'GET') {
-            response.end(JSON.stringify({ progress: localProgress.get(deckId) ?? null }))
+            response.end(JSON.stringify(current))
             return
           }
           if (request.method === 'PUT') {
             let body = ''
             for await (const chunk of request) body += chunk
-            const payload = JSON.parse(body) as { progress?: unknown }
-            localProgress.set(deckId, payload.progress ?? null)
-            response.end(JSON.stringify({ ok: true }))
+            const payload = JSON.parse(body) as { progress?: unknown; baseRevision?: number }
+            if (payload.baseRevision !== current.revision) {
+              response.statusCode = 409
+              response.end(JSON.stringify(current))
+              return
+            }
+            const revision = current.revision + 1
+            localProgress.set(deckId, { progress: payload.progress ?? null, revision })
+            response.end(JSON.stringify({ ok: true, revision }))
             return
           }
         }

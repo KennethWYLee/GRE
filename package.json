@@ -24,7 +24,8 @@
     "mandarin:validate": "node scripts/validate-mandarin-audio.mjs",
     "mandarin:smoke": "node scripts/smoke-mandarin-audio-live.mjs",
     "study:validate": "node scripts/validate-study.mjs",
-    "check": "pnpm run lint && pnpm run data:validate && pnpm run migration:validate && pnpm run access:validate && pnpm run study:validate && pnpm run pronunciation:validate && pnpm run english:validate && pnpm run mandarin:validate && pnpm run build"
+    "sync:validate": "node scripts/validate-sync.mjs",
+    "check": "pnpm run lint && pnpm run data:validate && pnpm run migration:validate && pnpm run access:validate && pnpm run study:validate && pnpm run sync:validate && pnpm run pronunciation:validate && pnpm run english:validate && pnpm run mandarin:validate && pnpm run build"
   },
   "dependencies": {
     "@radix-ui/react-slot": "^1.3.3",

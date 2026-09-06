@@ -2,6 +2,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import XLSX from "xlsx";
+import { parseDetails, correctKnownTypos } from './lib/vocabulary-details.mjs';
 
 const projectDir = fileURLToPath(new URL("..", import.meta.url));
 const workbookPath = process.env.GRE_1000_SOURCE_XLSX
@@ -51,12 +52,6 @@ function assert(condition, message) {
   if (!condition) throw new Error(message);
 }
 
-function cleanLabel(value, label) {
-  return String(value ?? "")
-    .replace(new RegExp(`^\\[${label}\\]\\s*`), "")
-    .trim();
-}
-
 function cleanDetails(value) {
   return String(value ?? "")
     .replace(/\s+\.\s+[A-Za-z]+\s+(?:1000|2000)\b/g, "")
@@ -64,26 +59,9 @@ function cleanDetails(value) {
     .trim();
 }
 
-function parseDetails(rawDetails) {
-  const details = String(rawDetails ?? "").trim();
-  const segments = details.split(/\s*\|\s*(?=\[(?:義|例|英)\]\s*)/);
-  const pronunciation = String(segments[0] ?? "")
-    .replace(/^\[/, "")
-    .replace(/\]$/, "")
-    .trim();
-
-  return {
-    pronunciation,
-    meaning: cleanLabel(segments[1], "義"),
-    example: cleanLabel(segments[2], "例"),
-    definition: cleanLabel(segments.slice(3).join(" | "), "英"),
-    raw: details,
-  };
-}
-
 const reference = JSON.parse(await fs.readFile(referencePath, "utf8"));
 const rootNoByName = new Map(
-  reference.rootGroups.map((group) => [group.root, group.rootNo]),
+  reference.rootGroups.map((group) => [correctKnownTypos(group.root), group.rootNo]),
 );
 rootNoByName.set("alien 疏遠", Math.max(...rootNoByName.values()) + 1);
 
@@ -91,7 +69,7 @@ const rootsByWord = new Map();
 for (const card of reference.words) {
   const key = card.word.toLocaleLowerCase();
   const roots = rootsByWord.get(key) ?? new Set();
-  roots.add(card.root);
+  roots.add(correctKnownTypos(card.root));
   rootsByWord.set(key, roots);
 }
 

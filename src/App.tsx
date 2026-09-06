@@ -31,22 +31,24 @@ import { Button } from './components/ui/button'
 import { AccountAccess, type ApprovedSession } from './AccountAccess'
 import { apiFetch } from './api-client'
 import { runAutoplayCard } from './autoplay'
+import { selectMandarinVoice } from './speech-voices'
+import { EMPTY_PROGRESS } from './progress-sync'
+import { useProgress } from './use-progress'
 import {
   advanceQuiz,
   buildQuizOptions,
   calculateStreak,
   dueWordIds,
-  emptyMemory,
+  claimLegacyMemory,
+  hasUnclaimedLegacyMemory,
   getOrCreateDeviceId,
-  loadMemory,
   localDateKey,
   mergeMemory,
-  normalizeMemory,
+  nextReviewIndex,
   normalizeSpelling,
   recordListeningCompletion,
   quizValue,
   recordReview,
-  saveMemory,
   setPosition,
   toggleFavorite,
   type DeckId,
@@ -61,19 +63,6 @@ type PronunciationStatus = 'idle' | 'loading' | 'ai' | 'unavailable'
 type MandarinStatus = 'idle' | 'loading' | 'ai' | 'unavailable'
 type SequenceMode = 'fixed' | 'random'
 type CardMode = 'flashcard' | 'quiz'
-type SyncStatus = 'idle' | 'loading' | 'synced' | 'offline'
-
-type ProgressResponse = {
-  progress: unknown
-  revision: number
-}
-
-type SaveProgressResponse = {
-  ok?: boolean
-  progress?: unknown
-  revision: number
-}
-
 type PlaybackEntry = {
   wordId: string
   promise: Promise<boolean>
@@ -108,6 +97,7 @@ type VocabularyWord = {
   meaning: string
   example: string
   definition: string
+  memoryNotes?: string
 }
 
 type VocabularyData = {
@@ -195,17 +185,6 @@ function selectEnglishVoice(voices: SpeechSynthesisVoice[]) {
     null
 }
 
-function selectMandarinVoice(voices: SpeechSynthesisVoice[]) {
-  const candidates = voices.filter((voice) => {
-    const language = voice.lang.toLocaleLowerCase()
-    return language === 'zh-tw' || language.startsWith('zh-hant') || language.startsWith('zh')
-  })
-  return candidates.find((voice) => /natural|premium|enhanced|online|hsiaochen|hanhan|yating|meijia|google/i.test(voice.name)) ??
-    candidates.find((voice) => voice.lang.toLocaleLowerCase() === 'zh-tw') ??
-    candidates[0] ??
-    null
-}
-
 function StudyApp({
   onManageAccounts,
   session,
@@ -220,15 +199,22 @@ function StudyApp({
   const [dailyReview, setDailyReview] = useState(false)
   const [dailyReviewIds, setDailyReviewIds] = useState<string[]>([])
   const [favoriteReview, setFavoriteReview] = useState(false)
-  const [cardIndex, setCardIndex] = useState(0)
+  const [requestedCardIndex, setCardIndex] = useState(0)
   const [flipped, setFlipped] = useState(false)
   const [studyMode, setStudyMode] = useState<StudyMode>('all')
   const [rootFilter, setRootFilter] = useState('all')
   const [query, setQuery] = useState('')
   const [shuffleOrder, setShuffleOrder] = useState<string[]>([])
-  const [memory, setMemory] = useState<MemoryStore>(emptyMemory)
-  const [syncReady, setSyncReady] = useState(false)
-  const [syncStatus, setSyncStatus] = useState<SyncStatus>('idle')
+  const { decks, update: updateProgress } = useProgress(session.email)
+  const memory = selectedDeck ? decks[selectedDeck].memory : EMPTY_PROGRESS
+  const syncStatus = selectedDeck ? decks[selectedDeck].status : 'loading'
+  const localSaved = selectedDeck ? decks[selectedDeck].localSaved : true
+  const [legacyAvailable, setLegacyAvailable] = useState(hasUnclaimedLegacyMemory)
+  const [legacyConfirmed, setLegacyConfirmed] = useState(false)
+  const [legacyError, setLegacyError] = useState('')
+  const setMemory = useCallback((change: (current: MemoryStore) => MemoryStore) => {
+    if (selectedDeck) updateProgress(selectedDeck, change)
+  }, [selectedDeck, updateProgress])
   const [cardMode, setCardMode] = useState<CardMode>('flashcard')
   const [quizKind, setQuizKind] = useState<QuizKind>('meaning')
   const [quizQueue, setQuizQueue] = useState<string[]>([])
@@ -250,9 +236,6 @@ function StudyApp({
   const audioUnlockedRef = useRef(false)
   const pronunciationRequestRef = useRef(0)
   const mandarinRequestRef = useRef(0)
-  const syncRevisionRef = useRef(0)
-  const lastSyncedMemoryRef = useRef('')
-  const syncRequestRef = useRef(0)
   const englishPlaybackRef = useRef<PlaybackEntry | null>(null)
   const mandarinPlaybackRef = useRef<PlaybackEntry | null>(null)
 
@@ -396,7 +379,7 @@ function StudyApp({
       () => { entry.completed = true },
     )
     return entry
-  }, [playPronunciation])
+  }, [playPronunciation, setMemory])
 
   const startMandarinPlayback = useCallback((wordId: string, meaning: string) => {
     const promise = speakMandarin(meaning)
@@ -437,71 +420,6 @@ function StudyApp({
       })
     return () => controller.abort()
   }, [selectedDeck])
-
-  useEffect(() => {
-    if (!selectedDeck) return
-    const controller = new AbortController()
-    syncRequestRef.current += 1
-    syncRevisionRef.current = 0
-    lastSyncedMemoryRef.current = ''
-    apiFetch(`/api/progress?deck=${selectedDeck}`, { signal: controller.signal })
-      .then((response) => {
-        if (!response.ok) throw new Error(`HTTP ${response.status}`)
-        return response.json() as Promise<ProgressResponse>
-      })
-      .then((payload) => {
-        const normalizedRemote = normalizeMemory(payload.progress)
-        const merged = mergeMemory(loadMemory(selectedDeck), payload.progress)
-        syncRevisionRef.current = Number(payload.revision) || 0
-        lastSyncedMemoryRef.current = JSON.stringify(normalizedRemote)
-        saveMemory(selectedDeck, merged)
-        setMemory(merged)
-        setSyncReady(true)
-        setSyncStatus('synced')
-      })
-      .catch((syncError) => {
-        if (syncError instanceof DOMException && syncError.name === 'AbortError') return
-        setSyncReady(true)
-        setSyncStatus('offline')
-      })
-    return () => controller.abort()
-  }, [selectedDeck])
-
-  useEffect(() => {
-    if (!selectedDeck) return
-    saveMemory(selectedDeck, memory)
-    if (!syncReady) return
-    const serializedMemory = JSON.stringify(memory)
-    if (serializedMemory === lastSyncedMemoryRef.current) return
-    const timeout = window.setTimeout(() => {
-      const requestId = syncRequestRef.current + 1
-      syncRequestRef.current = requestId
-      setSyncStatus('loading')
-      apiFetch(`/api/progress?deck=${selectedDeck}`, {
-        method: 'PUT',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ progress: memory, baseRevision: syncRevisionRef.current }),
-      })
-        .then(async (response) => {
-          const payload = await response.json() as SaveProgressResponse
-          if (requestId !== syncRequestRef.current) return
-          if (response.status === 409 && payload.progress) {
-            syncRevisionRef.current = Number(payload.revision) || 0
-            lastSyncedMemoryRef.current = ''
-            setMemory((current) => mergeMemory(current, payload.progress))
-            return
-          }
-          if (!response.ok) throw new Error(`HTTP ${response.status}`)
-          syncRevisionRef.current = Number(payload.revision) || syncRevisionRef.current
-          lastSyncedMemoryRef.current = serializedMemory
-          setSyncStatus('synced')
-        })
-        .catch(() => {
-          if (requestId === syncRequestRef.current) setSyncStatus('offline')
-        })
-    }, 650)
-    return () => window.clearTimeout(timeout)
-  }, [memory, selectedDeck, syncReady])
 
   useEffect(() => {
     window.localStorage.setItem(AUTOPLAY_SECONDS_KEY, String(cardDuration))
@@ -552,9 +470,15 @@ function StudyApp({
       : filteredWords,
     [cardMode, filteredWords, quizQueue, wordsById],
   )
+  const cardIndex = Math.max(0, Math.min(requestedCardIndex, studyWords.length - 1))
   const activeWord = studyWords[cardIndex]
   const activeMeaningSections = useMemo(
-    () => activeWord ? splitMeaningSections(activeWord.meaning) : null,
+    () => {
+      if (!activeWord) return null
+      const sections = splitMeaningSections(activeWord.meaning)
+      if (activeWord.memoryNotes) sections.memoryNotes.push(activeWord.memoryNotes)
+      return sections
+    },
     [activeWord],
   )
   const quizOptions = useMemo(
@@ -678,6 +602,7 @@ function StudyApp({
     rootFilter,
     selectedPart,
     sequenceMode,
+    setMemory,
     startEnglishPlayback,
     startMandarinPlayback,
     studyMode,
@@ -743,9 +668,6 @@ function StudyApp({
     setCardIndex(0)
     setFlipped(false)
     setSessionListenedIds([])
-    setMemory(loadMemory(deckId))
-    setSyncReady(false)
-    setSyncStatus('loading')
     resetQuiz()
     setSelectedDeck(deckId)
     resetPagePosition()
@@ -840,15 +762,22 @@ function StudyApp({
     if (!activeWord) return
     setMemory((current) => recordReview(current, activeWord.id, recall, undefined, Date.now(), deviceId))
     setSessionReviewedIds((current) => current.includes(activeWord.id) ? current : [...current, activeWord.id])
-    if (cardIndex < studyWords.length - 1) {
-      window.setTimeout(() => moveCard(1), 100)
-    } else if (dailyReview) {
-      window.setTimeout(() => setRoundComplete(true), 180)
+    const removed = (studyMode === 'review' && recall !== 'again') || (studyMode === 'known' && recall !== 'known')
+    const nextIndex = nextReviewIndex(studyWords.length, cardIndex, removed)
+    setCardIndex(nextIndex)
+    setFlipped(false)
+    if (!dailyReview && !favoriteReview && sequenceMode === 'fixed' && selectedPart !== null && studyMode === 'all' && rootFilter === 'all' && !query) {
+      setMemory((current) => setPosition(current, String(selectedPart), nextIndex))
     }
+    if (dailyReview && cardIndex === studyWords.length - 1) setRoundComplete(true)
   }
 
   const toggleActiveFavorite = () => {
     if (!activeWord) return
+    if (memory.favorites[activeWord.id] && (favoriteReview || studyMode === 'favorites') && cardMode === 'flashcard') {
+      setCardIndex(nextReviewIndex(studyWords.length, cardIndex, true))
+      setFlipped(false)
+    }
     setMemory((current) => toggleFavorite(current, activeWord.id))
   }
 
@@ -906,8 +835,6 @@ function StudyApp({
     setFlipped(false)
     setSessionListenedIds([])
     setError('')
-    setSyncReady(false)
-    setSyncStatus('idle')
     resetQuiz()
     resetPagePosition()
   }
@@ -1048,18 +975,34 @@ function StudyApp({
 
         <section className="deck-choice-grid" aria-label="選擇單字書">
           {deckOptions.map((option) => {
-            const deckMemory = loadMemory(option.id)
+            const deckMemory = decks[option.id].memory
             const known = Object.values(deckMemory.recall).filter((recall) => recall === 'known').length
             return (
               <button className="deck-choice-card" key={option.id} onClick={() => chooseDeck(option.id)} type="button">
                 <strong>{option.title}</strong>
                 <span>{option.description}</span>
-                <small>已背 {known.toLocaleString()} · 剩 {(option.count - known).toLocaleString()}</small>
+                <small>{!decks[option.id].loaded
+                  ? decks[option.id].status === 'offline' ? '等待連線，暫用本機進度' : decks[option.id].status === 'blocked' ? '請重新登入' : '正在同步進度…'
+                  : `已背 ${known.toLocaleString()} · 剩 ${(option.count - known).toLocaleString()}`}</small>
                 <ChevronRight aria-hidden="true" size={22} />
               </button>
             )
           })}
         </section>
+        {legacyAvailable && (
+          <details className="legacy-progress">
+            <summary>匯入此裝置的舊版進度</summary>
+            <p>舊版紀錄沒有帳號標記。只在確認這些紀錄屬於你時，才匯入至 {session.email}。</p>
+            <label><input type="checkbox" checked={legacyConfirmed} onChange={(event) => setLegacyConfirmed(event.target.checked)} />我確認舊版進度屬於目前帳號</label>
+            <Button disabled={!legacyConfirmed} onClick={() => {
+              const imported = claimLegacyMemory(session.email)
+              if (!imported) { setLegacyError('無法匯入，請確認瀏覽器允許儲存資料。'); return }
+              for (const deck of ['words1000', 'words2000'] as const) updateProgress(deck, (current) => mergeMemory(current, imported[deck]))
+              setLegacyAvailable(false)
+            }}>匯入我的舊版進度</Button>
+            {legacyError && <p role="alert">{legacyError}</p>}
+          </details>
+        )}
       </main>
     )
   }
@@ -1096,9 +1039,9 @@ function StudyApp({
           <div className="brand-actions">
             <button className="change-deck-button" onClick={changeDeck} type="button">{data.meta.title}</button>
             <span className="word-total">已背 {totalKnown.toLocaleString()} · 剩 {totalRemaining.toLocaleString()}</span>
-            <span className={`sync-indicator sync-${syncStatus}`} title={syncStatus === 'offline' ? '目前離線，進度已保存在本機' : '學習進度會同步到你的帳號'}>
+            <span className={`sync-indicator sync-${syncStatus}`} title={syncStatus === 'offline' ? localSaved ? '連線恢復後會自動同步，進度已保存在本機' : '進度尚未儲存，請保持網頁開啟並恢復連線' : '學習進度會同步到你的帳號'}>
               {syncStatus === 'offline' ? <CloudOff size={14} /> : <Cloud size={14} />}
-              <span>{syncStatus === 'loading' ? '同步中' : syncStatus === 'offline' ? '本機保存' : '已同步'}</span>
+              <span>{syncStatus === 'loading' ? '同步中' : syncStatus === 'blocked' ? '請重新登入' : syncStatus === 'offline' ? localSaved ? '本機保存' : '尚未同步' : '已同步'}</span>
             </span>
             {session.isAdmin && (
               <button aria-label="帳號審核" className="account-review-button" onClick={onManageAccounts} type="button">
@@ -1170,7 +1113,7 @@ function StudyApp({
               const remaining = part.totalWordCount - known
               const percent = Math.round((known / part.totalWordCount) * 100)
               return (
-                <button className="part-card" key={part.id} onClick={() => openPart(part.id)} type="button">
+                  <button className="part-card" disabled={!decks[selectedDeck].loaded && syncStatus === 'loading'} key={part.id} onClick={() => openPart(part.id)} type="button">
                   <span className="part-number">0{part.id}</span>
                   <span className="part-title">第 {part.id} 份</span>
                   <span className="part-meta">{part.totalWordCount} 字</span>
@@ -1576,7 +1519,7 @@ function StudyApp({
 function App() {
   return (
     <AccountAccess>
-      {({ session, openAdmin }) => <StudyApp onManageAccounts={openAdmin} session={session} />}
+      {({ session, openAdmin }) => <StudyApp key={session.email.trim().toLowerCase()} onManageAccounts={openAdmin} session={session} />}
     </AccountAccess>
   )
 }

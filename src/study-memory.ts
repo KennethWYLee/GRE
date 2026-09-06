@@ -39,6 +39,8 @@ export type MemoryStore = {
 
 const LEGACY_STORAGE_KEY = 'gre-roots-progress-v1'
 const STORAGE_KEY_PREFIX = 'gre-roots-progress-v2'
+const ACCOUNT_STORAGE_KEY_PREFIX = 'gre-roots-account-progress-v1'
+const LEGACY_OWNER_KEY = 'gre-roots-legacy-owner-v1'
 const DEVICE_STORAGE_KEY = 'gre-roots-device-id-v1'
 const DAY_MS = 86_400_000
 let fallbackDeviceId = ''
@@ -111,7 +113,30 @@ export function normalizeMemory(value: unknown): MemoryStore {
   }
 }
 
-export function loadMemory(deckId: DeckId): MemoryStore {
+function accountStorageKey(deckId: DeckId, email: string) {
+  if (!email.trim()) throw new Error('An account is required for progress storage')
+  return `${ACCOUNT_STORAGE_KEY_PREFIX}-${encodeURIComponent(email.trim().toLowerCase())}-${deckId}`
+}
+
+export function loadMemory(deckId: DeckId, email: string): MemoryStore {
+  try {
+    const saved = window.localStorage.getItem(accountStorageKey(deckId, email))
+    return saved ? normalizeMemory(JSON.parse(saved)) : emptyMemory()
+  } catch {
+    return emptyMemory()
+  }
+}
+
+export function saveMemory(deckId: DeckId, memory: MemoryStore, email: string) {
+  try {
+    window.localStorage.setItem(accountStorageKey(deckId, email), JSON.stringify(memory))
+    return true
+  } catch {
+    return false
+  }
+}
+
+function loadLegacyMemory(deckId: DeckId): MemoryStore {
   try {
     const storageKey = `${STORAGE_KEY_PREFIX}-${deckId}`
     const saved = window.localStorage.getItem(storageKey) ??
@@ -122,8 +147,38 @@ export function loadMemory(deckId: DeckId): MemoryStore {
   }
 }
 
-export function saveMemory(deckId: DeckId, memory: MemoryStore) {
-  window.localStorage.setItem(`${STORAGE_KEY_PREFIX}-${deckId}`, JSON.stringify(memory))
+export function hasUnclaimedLegacyMemory() {
+  try {
+    if (window.localStorage.getItem(LEGACY_OWNER_KEY)) return false
+    return (['words1000', 'words2000'] as const).some((deck) => {
+      const saved = loadLegacyMemory(deck)
+      return Object.values(saved).some((value) => typeof value === 'object' && Object.keys(value).length > 0)
+    })
+  } catch {
+    return false
+  }
+}
+
+// Unscoped records cannot be assigned safely without the user's explicit claim.
+// Keep the originals intact, including when storage is full or unavailable.
+export function claimLegacyMemory(email: string) {
+  try {
+    if (!email.trim() || window.localStorage.getItem(LEGACY_OWNER_KEY)) return null
+    const imported = {
+      words1000: mergeMemory(loadMemory('words1000', email), loadLegacyMemory('words1000')),
+      words2000: mergeMemory(loadMemory('words2000', email), loadLegacyMemory('words2000')),
+    }
+    if (!saveMemory('words1000', imported.words1000, email) || !saveMemory('words2000', imported.words2000, email)) return null
+    window.localStorage.setItem(LEGACY_OWNER_KEY, email.trim().toLowerCase())
+    return imported
+  } catch {
+    return null
+  }
+}
+
+export function nextReviewIndex(length: number, index: number, removed: boolean) {
+  const remaining = length - (removed ? 1 : 0)
+  return Math.max(0, Math.min(index + (removed ? 0 : 1), remaining - 1))
 }
 
 export function mergeMemory(local: MemoryStore, remote: unknown): MemoryStore {

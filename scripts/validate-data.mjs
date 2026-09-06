@@ -1,4 +1,5 @@
 import fs from "node:fs/promises";
+import { correctKnownTypos, primaryEntry, parseDetails } from './lib/vocabulary-details.mjs';
 
 function assert(condition, message) {
   if (!condition) throw new Error(message);
@@ -20,6 +21,15 @@ const decks = [
 ];
 const results = [];
 
+const withoutExample = parseDetails('[test] | [義] 稀釋 | [記] 先加水 | [英] v. make thinner')
+assert(withoutExample.example === '', 'Missing example must stay empty')
+assert(withoutExample.definition === 'v. make thinner', 'Definition must not become an example')
+assert(withoutExample.memoryNotes === '先加水', 'Memory note must be separate')
+assert(withoutExample.meaning === '稀釋', 'Notes must not leak into meaning')
+const reordered = parseDetails('[test] | [英] adj. urgent | [義] 緊急的 [類] crititcal, acute | [例] An urgent call.')
+assert(reordered.definition === 'adj. urgent' && reordered.example === 'An urgent call.', 'Fields must be identified by label, not position')
+assert(reordered.meaning === '緊急的 [類] critical, acute', 'Correct known spelling errors in displayed data')
+
 for (const expected of decks) {
   const data = JSON.parse(await fs.readFile(new URL(expected.file, import.meta.url), "utf8"));
   const label = data.meta.title;
@@ -28,17 +38,30 @@ for (const expected of decks) {
   assert(new Set(data.words.map((word) => word.id)).size === expected.totalWords, `${label}: word IDs are not unique`);
   assert(data.words.every((word) => word.word && word.meaning && word.root && word.part), `${label}: a required card field is blank`);
   assert(data.parts.length === 5, `${label}: expected five parts`);
+  const lax = data.words.find((word) => word.word === 'lax')
+  assert(!lax.meaning.includes('花錢') && !lax.example.includes('wedding'), 'The following lay out entry must not be attributed to lax')
+  assert(lax.raw.includes('lay out'), 'Keep unmodified source text for recovery')
 
   const synonymWords = data.words.filter((word) => taggedSections(word.raw, "類").length > 0);
   let synonymSectionCount = 0;
   for (const word of synonymWords) {
-    const sourceSynonyms = taggedSections(word.raw, "類");
+    const sourceSynonyms = taggedSections(primaryEntry(word.raw), "類");
     const exportedSynonyms = taggedSections(word.meaning, "類");
     synonymSectionCount += sourceSynonyms.length;
     assert(
-      JSON.stringify(exportedSynonyms) === JSON.stringify(sourceSynonyms),
+      JSON.stringify(exportedSynonyms) === JSON.stringify(sourceSynonyms.map(correctKnownTypos)),
       `${label}: synonyms were not preserved for #${word.sourceNo} ${word.word}`,
     );
+  }
+
+  for (const word of data.words) {
+    for (const [label, field] of [['例', 'example'], ['英', 'definition'], ['記', 'memoryNotes']]) {
+      const expected = taggedSections(primaryEntry(word.raw), label).map(correctKnownTypos)
+      const joiner = label === '記' ? '；' : ' | '
+      assert(String(word[field] ?? '').replace(/\s+/g, ' ').trim() === expected.join(joiner), `${label}: misplaced or missing ${field} for ${word.word}`)
+    }
+    assert(!/\[(?:義|英|例|記)\]/.test(word.example + word.definition + word.memoryNotes), `Misplaced tag in ${word.word}`)
+    assert(!/crititcal|ususal/.test(word.meaning + word.root), `Uncorrected typo in ${word.word}`)
   }
 
   const partChecks = data.parts.map((part) => {

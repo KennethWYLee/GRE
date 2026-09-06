@@ -2,6 +2,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import XLSX from "xlsx";
+import { parseDetails, correctKnownTypos } from './lib/vocabulary-details.mjs';
 
 const projectDir = fileURLToPath(new URL("..", import.meta.url));
 const sourceDirectory = path.resolve(
@@ -40,34 +41,11 @@ function assert(condition, message) {
   if (!condition) throw new Error(message);
 }
 
-function cleanLabel(value, label) {
-  return String(value ?? "")
-    .replace(new RegExp(`^\\[${label}\\]\\s*`), "")
-    .trim();
-}
-
 function cleanDetails(value) {
   return String(value ?? "")
     .replace(/\s+\.\s+[A-Za-z]+\s+2000\b/g, "")
     .replace(/\s*\|\s*Mason\s+(?:1000|2000)\b/gi, "")
     .trim();
-}
-
-function parseDetails(rawDetails) {
-  const details = String(rawDetails ?? "").trim();
-  const segments = details.split(/\s*\|\s*(?=\[(?:義|例|英)\]\s*)/);
-  const pronunciation = String(segments[0] ?? "")
-    .replace(/^\[/, "")
-    .replace(/\]$/, "")
-    .trim();
-
-  return {
-    pronunciation,
-    meaning: cleanLabel(segments[1], "義"),
-    example: cleanLabel(segments[2], "例"),
-    definition: cleanLabel(segments.slice(3).join(" | "), "英"),
-    raw: details,
-  };
 }
 
 const workbook = XLSX.readFile(workbookPath);
@@ -88,7 +66,7 @@ assert(
 const sourceRows = values.slice(1).map((row, index) => ({
   sourceNo: Number(row[0]),
   sourcePart: Number(String(row[1]).replace(/\D+/g, "")),
-  root: String(row[2] ?? "").trim(),
+  root: correctKnownTypos(row[2]).trim(),
   frequency: String(row[3] ?? "").trim(),
   word: String(row[4] ?? "").trim(),
   details: cleanDetails(row[5]),

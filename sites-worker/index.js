@@ -177,6 +177,7 @@ async function serveVocabulary(request, env, deckId) {
 async function getStudyProgress(request, env, requestUrl) {
   const access = await requireApproved(request, env)
   if (access.response) return access.response
+  if (!isSameProgressAccount(request, access.session.email)) return json({ error: 'account_changed' }, 403)
   const deckId = requestUrl.searchParams.get('deck')
   if (!VOCABULARY_JSON_BY_DECK[deckId]) return json({ error: 'invalid_deck' }, 400)
 
@@ -199,6 +200,7 @@ async function getStudyProgress(request, env, requestUrl) {
 async function saveStudyProgress(request, env, requestUrl) {
   const access = await requireApproved(request, env)
   if (access.response) return access.response
+  if (!isSameProgressAccount(request, access.session.email)) return json({ error: 'account_changed' }, 403)
   if (!isTrustedOrigin(request)) return json({ error: 'invalid_origin' }, 403)
   if (!(request.headers.get('content-type') ?? '').toLocaleLowerCase().includes('application/json')) {
     return json({ error: 'json_required' }, 415)
@@ -255,6 +257,13 @@ async function saveStudyProgress(request, env, requestUrl) {
     revision: nextRevision,
     updatedAt: row?.updated_at ?? null,
   })
+}
+
+function isSameProgressAccount(request, email) {
+  const expected = request.headers.get('x-gre-account-email')
+  // The optional header preserves old-client compatibility; new clients bind
+  // every request to their mounted account to reject stale signed-in tabs.
+  return expected === null || normalizeEmail(expected) === email
 }
 
 function progressConflict(row) {

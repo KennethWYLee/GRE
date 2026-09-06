@@ -85,6 +85,16 @@ try {
   if (blockedProgress.status !== 403) throw new Error(`Pending learner got progress: ${blockedProgress.status}`)
 
   const adminEmail = ADMIN_EMAILS[0]
+  for (const method of ['GET', 'PUT']) {
+    const changedAccount = await worker.fetch(signedRequest('/api/progress?deck=words1000', adminEmail, {
+      method,
+      headers: { 'x-gre-account-email': ADMIN_EMAILS[1], 'content-type': 'application/json' },
+      ...(method === 'PUT' ? { body: JSON.stringify({ progress: emptyMemory(), baseRevision: 0 }) } : {}),
+    }), env)
+    if (changedAccount.status !== 403 || (await changedAccount.json()).error !== 'account_changed') {
+      throw new Error('A tab mounted for a different account must not read or write progress')
+    }
+  }
   const approvedVocabulary = await worker.fetch(signedRequest('/api/vocabulary', adminEmail), env)
   if (approvedVocabulary.status !== 200) throw new Error(`Admin vocabulary failed: ${approvedVocabulary.status}`)
   if ((await approvedVocabulary.json()).meta.totalWords !== 2078) throw new Error('Approved vocabulary payload is invalid')

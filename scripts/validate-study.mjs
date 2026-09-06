@@ -10,6 +10,7 @@ import {
   mergeMemory,
   normalizeMemory,
   normalizeSpelling,
+  nextReviewIndex,
   recordListeningCompletion,
   recordReview,
   setPosition,
@@ -104,6 +105,21 @@ assert.deepEqual(wrongAdvance, { queue: ['word-1', 'word-2', 'word-1'], nextInde
 const finalAdvance = advanceQuiz(['word-1', 'word-2'], 1, 'word-2', true)
 assert.equal(finalAdvance.complete, true)
 
+// Regression: removing a remembered card from a live review filter must not
+// skip its successor or leave a valid nonempty list displaying an empty state.
+let reviewQueue = ['prodigal', 'exigent', 'agitated']
+let reviewIndex = 0
+const visited = []
+while (reviewQueue.length) {
+  visited.push(reviewQueue[reviewIndex])
+  const next = nextReviewIndex(reviewQueue.length, reviewIndex, true)
+  reviewQueue.splice(reviewIndex, 1)
+  reviewIndex = next
+}
+assert.deepEqual(visited, ['prodigal', 'exigent', 'agitated'])
+assert.equal(nextReviewIndex(2, 1, true), 0, 'Removing the final favorite must leave the remaining favorite visible')
+assert.equal(nextReviewIndex(3, 0, false), 1, 'An unchanged list should advance normally')
+
 let autoplayClock = 0
 const autoplayEvents = []
 const autoplayAdvanced = await runAutoplayCard({
@@ -197,4 +213,5 @@ console.log(JSON.stringify({
   listeningCountsOnlySuccessfulPlayback: true,
   listeningSyncMerge: true,
   listeningUiStaysCollapsed: true,
+  filteredReviewDoesNotSkip: true,
 }, null, 2))
