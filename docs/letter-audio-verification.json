@@ -1,0 +1,78 @@
+{
+  "method": "Independent unprompted speech recognition of actual decoded PCM audio; not a human listening test.",
+  "model": "faster-whisper base.en",
+  "language": "en",
+  "letterGapSeconds": 0.1,
+  "recordingHashes": {
+    "A": "204a0ba4c83cf18cfda4b4c73948932ab2f5e2c3f31b80df0bb2bc00776b55f5",
+    "B": "b537eb957543fc8590d3c82de48caf7e01ec8c3f7f0cc7e1fc87289d5d7cfa9a",
+    "C": "efb851fea957905631ae9f955f5c955dab3beae62fae1b1158db550a864c0d5d",
+    "D": "f315e11a5c20882280d0d7b559f5e0bed149e8461c7f66d26f3a218a5a3e774d",
+    "E": "40060fd224f4c6a299b087575247a8c14487de9df841482fbb677ac378da14cf",
+    "F": "c7c139c55389714858750b5bb20cf92c4112f802d704c156803400db3e4b2239",
+    "G": "8a7e04a661ccbac07e4274b015a298d3401c25ecd0ee3671adde37d9b775aaac",
+    "H": "444e4ff56c9d62c640835f89740bac63bd6a812cce86e8cce958de32ac31ac39",
+    "I": "8a077da0ceb06ca310b1eb738f0def36ce8b6e0f884f079b52249912c239bf1c",
+    "J": "c8d682526f8ab1a2e38612080303bf424be5e8f80703b19d070d547281f6df5b",
+    "K": "3ecd0781d1a56e9a4341515de54e12527067af889a7439c13f366dbe64ec794a",
+    "L": "72350d42cfda0ee565c7e1a9bfea3d27de9b57990a9b22e45e4dfc04418aecb8",
+    "M": "9953fc17ca443fd7c0fa3acb805dbc348ed130343edb89a841ca5b29925b67e8",
+    "N": "174c987ffadba8503fb829d993633bbf2c624af572b5ff073577804be5d28be7",
+    "O": "ef783f78107e77f5ddaba1969551a116127505e4e5dd9137a642ead60adab4fc",
+    "P": "0633ebdf71de5f2919b5b9c14ba57d7eaa42b43f68aaa81431f36175b656058e",
+    "Q": "2d5ef373eaec06119caf41e5dd05352d6d64e4e51caca68603d7e5912289eda4",
+    "R": "5cde4a989f12ef27153048a5de617126bc2af1f11e508f7362fe9286625a73c8",
+    "S": "535bb8e30eb17858b7924538dd9b79de7ce6b353839ed42cdfe068fc67c3830e",
+    "T": "a7a1eac475d7474c82669792dbb453457d10850d04c598e432a4716fe619edd1",
+    "U": "29afba8e7d34ed61cc5c9f56b11e283f8d6b14ad8139400e1a5cc47fe5f2c570",
+    "V": "23f506cb579c32b1a120177db52080ea5c36fbee27c42cf972a19a1ab9f660f4",
+    "W": "aa4199014132ae984b901ad83d87a9405ccda51404c57cabf27ef7d631230425",
+    "X": "5beb42d1252fc01e53692f6bcd8bb5b111c9b0ea1bbc2df8600f94aa94118f49",
+    "Y": "e32a4f1bc8790a07397db5e573dc7e067902de1678294847d31bf69a580b7478",
+    "Z": "f23094f195efd09e7dcfa5eff1da456631af4922bcac7f4f8abc43a5d1b6ea73"
+  },
+  "results": [
+    {
+      "expected": "ABCDEFGHIJKLMNOPQRSTUVWXYZ",
+      "transcript": "A, B, C, D, E, F, G, H, I, J, K, L, M, N, O, P, Q, R, S, T, U, V, W, X, Y, Z.",
+      "matches": true,
+      "duration": 20.830208333333335,
+      "sha256": "3d9e8dc1bdc790c39998e8b16ac029d130dbcc4706975f423b74ebf3aff175b7"
+    },
+    {
+      "expected": "QWERTYUIOPASDFGHJKLZXCVBNM",
+      "transcript": "Q, W, E, R, T, Y, U, I, O, P, A, S, D, F, G, H, J, K, L, Z, X, C, V, B, N, M,",
+      "matches": true,
+      "duration": 20.830208333333335,
+      "sha256": "d38eb43a4864369bbcc4ea058e9cb2c2d4808fd791176a0128bee883307c9d9e"
+    },
+    {
+      "expected": "APPLE",
+      "transcript": "A, P, P, L, E.",
+      "matches": true,
+      "duration": 2.982,
+      "sha256": "359806e55a8d34adc2d031165105854de257a6b57df2063cf0147db24f64f6d7"
+    },
+    {
+      "expected": "BOOKKEEPER",
+      "transcript": "B, O, O, K, K, E, E, P, E, R.",
+      "matches": true,
+      "duration": 8.402875,
+      "sha256": "bd069fbffa85ec3825a4e194313820fe3a299b42bf7bb94939dfb03f34712546"
+    },
+    {
+      "expected": "WXYZ",
+      "transcript": "W X Y Z",
+      "matches": true,
+      "duration": 3.198916666666667,
+      "sha256": "c5b3c61e3d89f818144701c931dbde7401ae2b7eeb380ea74f66bbf2cef2b0ef"
+    },
+    {
+      "expected": "AGHIJ",
+      "transcript": "A. G. H. I. J.",
+      "matches": true,
+      "duration": 3.870416666666667,
+      "sha256": "3bc8f099dc264fb1166ae800f05a7ec875b59aa065ce9b7a3ea234dcfce82f81"
+    }
+  ]
+}

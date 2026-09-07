@@ -32,6 +32,7 @@ import { AccountAccess, type ApprovedSession } from './AccountAccess'
 import { apiFetch } from './api-client'
 import { runAutoplayCard } from './autoplay'
 import { runEnglishPronunciation, type PronunciationMode } from './detailed-pronunciation'
+import { createLetterAudioPlayer } from './letter-audio'
 import { selectMandarinVoice } from './speech-voices'
 import { EMPTY_PROGRESS } from './progress-sync'
 import { useProgress } from './use-progress'
@@ -248,19 +249,32 @@ function StudyApp({
   const englishPlaybackRef = useRef<PlaybackEntry | null>(null)
   const mandarinPlaybackRef = useRef<PlaybackEntry | null>(null)
   const cancelSpeechRef = useRef<(() => void) | null>(null)
+  const letterAudioRef = useRef<ReturnType<typeof createLetterAudioPlayer> | null>(null)
+  const getLetterAudio = useCallback(() => letterAudioRef.current ??= createLetterAudioPlayer(), [])
   const cancelSpeech = useCallback(() => {
     cancelSpeechRef.current?.()
     cancelSpeechRef.current = null
     window.speechSynthesis?.cancel()
+    letterAudioRef.current?.stop()
   }, [])
 
   const unlockAudio = useCallback(() => {
+    void getLetterAudio().unlock().catch(() => undefined)
     if (audioUnlockedRef.current) return
     const silent = new Audio(SILENT_AUDIO)
     silent.volume = 0.01
     void silent.play()
       .then(() => { audioUnlockedRef.current = true })
       .catch(() => undefined)
+  }, [getLetterAudio])
+
+  useEffect(() => {
+    if (pronunciationMode === 'detailed') void getLetterAudio().preload().catch(() => undefined)
+  }, [getLetterAudio, pronunciationMode])
+
+  useEffect(() => () => {
+    letterAudioRef.current?.dispose()
+    letterAudioRef.current = null
   }, [])
 
   const speakWithDevice = useCallback((word: string, requestId: number) => (
@@ -319,18 +333,34 @@ function StudyApp({
     setMandarinStatus('idle')
 
     cancelSpeech()
+    if (pronunciationMode === 'detailed' && cardMode === 'flashcard') {
+      try { await getLetterAudio().preload() }
+      catch {
+        if (requestId === pronunciationRequestRef.current) setPronunciationStatus('unavailable')
+        return false
+      }
+    }
     const played = await runEnglishPronunciation({
       word,
       mode: cardMode === 'flashcard' ? pronunciationMode : 'general',
       isActive: () => requestId === pronunciationRequestRef.current,
-      speak: (text, letter) => {
-        setSpellingLetter(letter)
-        return speakWithDevice(text, requestId)
-      },
+      speak: (text) => speakWithDevice(text, requestId),
+      spell: (letters) => getLetterAudio().play(letters, setSpellingLetter),
+      wait: (milliseconds) => new Promise<void>((resolve) => {
+        const cancel = () => { window.clearTimeout(timer); resolve() }
+        const timer = window.setTimeout(() => {
+          if (cancelSpeechRef.current === cancel) cancelSpeechRef.current = null
+          resolve()
+        }, milliseconds)
+        cancelSpeechRef.current = cancel
+      }),
     })
-    if (requestId === pronunciationRequestRef.current) setSpellingLetter(null)
+    if (requestId === pronunciationRequestRef.current) {
+      setSpellingLetter(null)
+      if (!played) setPronunciationStatus('unavailable')
+    }
     return played
-  }, [cancelSpeech, cardMode, pronunciationMode, speakWithDevice])
+  }, [cancelSpeech, cardMode, getLetterAudio, pronunciationMode, speakWithDevice])
 
   const speakMandarinWithDevice = useCallback((text: string, requestId: number) => (
     new Promise<boolean>((resolve) => {
@@ -1318,7 +1348,7 @@ function StudyApp({
               <button type="button" aria-pressed={pronunciationMode === 'general'} className={pronunciationMode === 'general' ? 'is-active' : ''} onClick={() => changePronunciationMode('general')}>一般發音</button>
               <button type="button" aria-pressed={pronunciationMode === 'detailed'} className={pronunciationMode === 'detailed' ? 'is-active' : ''} onClick={() => changePronunciationMode('detailed')}>詳細發音</button>
             </div>
-            {pronunciationMode === 'detailed' && <p>單字 → 逐字母拼讀 → 單字 → 翻面念中文</p>}
+            {pronunciationMode === 'detailed' && <p>單字 → 逐字母拼讀 → 單字 → 翻面念中文<br /><a href="/audio/letters-v1/attribution.json" target="_blank" rel="noreferrer">字母錄音來源與授權</a></p>}
           </div>
         )}
         {cardMode === 'flashcard' && <div className={`autoplay-panel ${autoPlay ? 'is-playing' : ''}`}>
