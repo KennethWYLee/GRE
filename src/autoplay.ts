@@ -20,14 +20,14 @@ export async function runAutoplayCard({
   pauseAfterSpeechMs = 1_000,
 }: AutoplayCardOptions) {
   const startedAt = now()
-  await playEnglish()
+  if (await playEnglish() === false) return false
   if (!isActive()) return false
 
   await wait(pauseAfterSpeechMs)
   if (!isActive()) return false
   showMeaning()
 
-  if (playMandarin) await playMandarin()
+  if (playMandarin && await playMandarin() === false) return false
   if (!isActive()) return false
 
   await wait(pauseAfterSpeechMs)

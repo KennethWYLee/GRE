@@ -31,6 +31,7 @@ import { Button } from './components/ui/button'
 import { AccountAccess, type ApprovedSession } from './AccountAccess'
 import { apiFetch } from './api-client'
 import { runAutoplayCard } from './autoplay'
+import { runEnglishPronunciation, type PronunciationMode } from './detailed-pronunciation'
 import { selectMandarinVoice } from './speech-voices'
 import { EMPTY_PROGRESS } from './progress-sync'
 import { useProgress } from './use-progress'
@@ -110,6 +111,7 @@ type VocabularyData = {
 const SEQUENCE_MODE_KEY = 'gre-roots-sequence-mode-v1'
 const AUTOPLAY_SECONDS_KEY = 'gre-roots-autoplay-seconds-v1'
 const MANDARIN_AUTOPLAY_KEY = 'gre-roots-mandarin-autoplay-v1'
+const PRONUNCIATION_MODE_KEY = 'gre-roots-pronunciation-mode-v1'
 const AUTOPLAY_OPTIONS = [3, 5, 8, 10, 15, 20, 30] as const
 const SPEECH_COMPLETION_TIMEOUT_MS = 15_000
 const PAUSE_AFTER_SPEECH_MS = 1_000
@@ -229,7 +231,14 @@ function StudyApp({
   const [pronunciationStatus, setPronunciationStatus] = useState<PronunciationStatus>('idle')
   const [mandarinStatus, setMandarinStatus] = useState<MandarinStatus>('idle')
   const [mandarinAutoplay, setMandarinAutoplay] = useState(loadMandarinAutoplay)
+  const [pronunciationMode, setPronunciationMode] = useState<PronunciationMode>(() => {
+    try { return window.localStorage.getItem(PRONUNCIATION_MODE_KEY) === 'detailed' ? 'detailed' : 'general' }
+    catch { return 'general' }
+  })
+  const [spellingLetter, setSpellingLetter] = useState<string | null>(null)
   const [autoPlay, setAutoPlay] = useState(false)
+  const autoPlayRef = useRef(false)
+  useEffect(() => { autoPlayRef.current = autoPlay }, [autoPlay])
   const [cardDuration, setCardDuration] = useState(loadAutoplaySeconds)
   const deviceId = useMemo(() => getOrCreateDeviceId(), [])
   const touchStartX = useRef<number | null>(null)
@@ -238,6 +247,12 @@ function StudyApp({
   const mandarinRequestRef = useRef(0)
   const englishPlaybackRef = useRef<PlaybackEntry | null>(null)
   const mandarinPlaybackRef = useRef<PlaybackEntry | null>(null)
+  const cancelSpeechRef = useRef<(() => void) | null>(null)
+  const cancelSpeech = useCallback(() => {
+    cancelSpeechRef.current?.()
+    cancelSpeechRef.current = null
+    window.speechSynthesis?.cancel()
+  }, [])
 
   const unlockAudio = useCallback(() => {
     if (audioUnlockedRef.current) return
@@ -257,21 +272,24 @@ function StudyApp({
       }
 
       const synth = window.speechSynthesis
-      synth.cancel()
       const utterance = new SpeechSynthesisUtterance(word)
       let settled = false
       const finish = (played: boolean) => {
         if (settled) return
         settled = true
         window.clearTimeout(completionTimer)
+        if (cancelSpeechRef.current === cancel) cancelSpeechRef.current = null
         utterance.onstart = null
         utterance.onend = null
         utterance.onerror = null
         resolve(played)
       }
+      const cancel = () => finish(false)
+      cancelSpeechRef.current = cancel
       const completionTimer = window.setTimeout(() => {
-        synth.cancel()
         finish(false)
+        synth.cancel()
+        if (requestId === pronunciationRequestRef.current) setPronunciationStatus('unavailable')
       }, SPEECH_COMPLETION_TIMEOUT_MS)
       utterance.voice = selectEnglishVoice(synth.getVoices())
       utterance.lang = 'en-US'
@@ -300,9 +318,19 @@ function StudyApp({
     mandarinRequestRef.current += 1
     setMandarinStatus('idle')
 
-    window.speechSynthesis?.cancel()
-    return speakWithDevice(word, requestId)
-  }, [speakWithDevice])
+    cancelSpeech()
+    const played = await runEnglishPronunciation({
+      word,
+      mode: cardMode === 'flashcard' ? pronunciationMode : 'general',
+      isActive: () => requestId === pronunciationRequestRef.current,
+      speak: (text, letter) => {
+        setSpellingLetter(letter)
+        return speakWithDevice(text, requestId)
+      },
+    })
+    if (requestId === pronunciationRequestRef.current) setSpellingLetter(null)
+    return played
+  }, [cancelSpeech, cardMode, pronunciationMode, speakWithDevice])
 
   const speakMandarinWithDevice = useCallback((text: string, requestId: number) => (
     new Promise<boolean>((resolve) => {
@@ -319,14 +347,18 @@ function StudyApp({
         if (settled) return
         settled = true
         window.clearTimeout(completionTimer)
+        if (cancelSpeechRef.current === cancel) cancelSpeechRef.current = null
         utterance.onstart = null
         utterance.onend = null
         utterance.onerror = null
         resolve(played)
       }
+      const cancel = () => finish(false)
+      cancelSpeechRef.current = cancel
       const completionTimer = window.setTimeout(() => {
-        synth.cancel()
         finish(false)
+        synth.cancel()
+        if (requestId === mandarinRequestRef.current) setMandarinStatus('unavailable')
       }, SPEECH_COMPLETION_TIMEOUT_MS)
       utterance.lang = 'zh-TW'
       utterance.voice = selectMandarinVoice(synth.getVoices())
@@ -352,7 +384,8 @@ function StudyApp({
     mandarinRequestRef.current = requestId
     pronunciationRequestRef.current += 1
     setPronunciationStatus('idle')
-    window.speechSynthesis?.cancel()
+    cancelSpeech()
+    setSpellingLetter(null)
 
     const text = mandarinSpeechText(meaning)
     if (!text) {
@@ -361,25 +394,7 @@ function StudyApp({
     }
     setMandarinStatus('loading')
     return speakMandarinWithDevice(text, requestId)
-  }, [speakMandarinWithDevice])
-
-  const startEnglishPlayback = useCallback((wordId: string, word: string) => {
-    mandarinPlaybackRef.current = null
-    const promise = playPronunciation(word)
-    const entry: PlaybackEntry = { wordId, promise, completed: false }
-    englishPlaybackRef.current = entry
-    void promise.then(
-      (played) => {
-        entry.completed = true
-        if (!played) return
-        const completedAt = Date.now()
-        setMemory((current) => recordListeningCompletion(current, wordId, completedAt))
-        setSessionListenedIds((current) => current.includes(wordId) ? current : [...current, wordId])
-      },
-      () => { entry.completed = true },
-    )
-    return entry
-  }, [playPronunciation, setMemory])
+  }, [cancelSpeech, speakMandarinWithDevice])
 
   const startMandarinPlayback = useCallback((wordId: string, meaning: string) => {
     const promise = speakMandarin(meaning)
@@ -392,15 +407,38 @@ function StudyApp({
     return entry
   }, [speakMandarin])
 
+  const startEnglishPlayback = useCallback((wordId: string, word: string, meaning?: string) => {
+    mandarinPlaybackRef.current = null
+    const promise = playPronunciation(word)
+    const entry: PlaybackEntry = { wordId, promise, completed: false }
+    englishPlaybackRef.current = entry
+    void promise.then(
+      (played) => {
+        entry.completed = true
+        if (!played) return
+        if (englishPlaybackRef.current !== entry) return
+        const completedAt = Date.now()
+        setMemory((current) => recordListeningCompletion(current, wordId, completedAt))
+        setSessionListenedIds((current) => current.includes(wordId) ? current : [...current, wordId])
+        if (pronunciationMode === 'detailed' && cardMode === 'flashcard' && meaning && !autoPlayRef.current) {
+          setFlipped(true)
+        }
+      },
+      () => { entry.completed = true },
+    )
+    return entry
+  }, [cardMode, playPronunciation, pronunciationMode, setMemory])
+
   const stopPronunciation = useCallback(() => {
     pronunciationRequestRef.current += 1
     mandarinRequestRef.current += 1
     englishPlaybackRef.current = null
     mandarinPlaybackRef.current = null
-    window.speechSynthesis?.cancel()
+    cancelSpeech()
+    setSpellingLetter(null)
     setPronunciationStatus('idle')
     setMandarinStatus('idle')
-  }, [])
+  }, [cancelSpeech])
 
   useEffect(() => {
     if (!selectedDeck) return
@@ -488,30 +526,36 @@ function StudyApp({
 
   useEffect(() => {
     if (!activeWord) return
+    const requestId = pronunciationRequestRef.current
     const timeout = window.setTimeout(() => {
+      if (requestId !== pronunciationRequestRef.current) return
       if (englishPlaybackRef.current?.wordId !== activeWord.id) {
-        startEnglishPlayback(activeWord.id, activeWord.word)
+        startEnglishPlayback(activeWord.id, activeWord.word, activeMeaningSections?.primary)
       }
     }, 80)
     return () => window.clearTimeout(timeout)
-  }, [activeWord, startEnglishPlayback])
+  }, [activeMeaningSections, activeWord, startEnglishPlayback])
 
   useEffect(() => {
-    if (!activeWord || !activeMeaningSections || !flipped || !mandarinAutoplay || cardMode !== 'flashcard') return
+    if (!activeWord || !activeMeaningSections || !flipped || !(mandarinAutoplay || pronunciationMode === 'detailed') || cardMode !== 'flashcard') return
+    const requestId = mandarinRequestRef.current
     const timeout = window.setTimeout(() => {
-      if (!autoPlay || mandarinPlaybackRef.current?.wordId !== activeWord.id) {
+      if (requestId !== mandarinRequestRef.current) return
+      // Autoplay owns its entire sequence, including pausing on the back face.
+      if (autoPlayRef.current) return
+      if (pronunciationMode === 'general' || mandarinPlaybackRef.current?.wordId !== activeWord.id) {
         startMandarinPlayback(activeWord.id, activeMeaningSections.primary)
       }
     }, 80)
     return () => window.clearTimeout(timeout)
-  }, [activeMeaningSections, activeWord, autoPlay, cardMode, flipped, mandarinAutoplay, startMandarinPlayback])
+  }, [activeMeaningSections, activeWord, cardMode, flipped, mandarinAutoplay, pronunciationMode, startMandarinPlayback])
 
   useEffect(() => {
     if (!activeWord) return
     if ('speechSynthesis' in window) window.speechSynthesis.getVoices()
   }, [activeWord])
 
-  useEffect(() => stopPronunciation, [stopPronunciation])
+  useEffect(() => stopPronunciation, [activeWord?.id, cardMode, stopPronunciation])
 
   useEffect(() => {
     if (!autoPlay || !activeWord) return
@@ -540,10 +584,10 @@ function StudyApp({
       let entry = playbackRef.current
       if (!entry || entry.wordId !== activeWord.id || entry.completed) entry = startPlayback()
       while (entry) {
-        await entry.promise
-        if (!isActive()) return
+        const played = await entry.promise
+        if (!isActive()) return false
         const latest = playbackRef.current
-        if (!latest || latest.wordId !== activeWord.id || latest.promise === entry.promise) return
+        if (!latest || latest.wordId !== activeWord.id || latest.promise === entry.promise) return played
         entry = latest
       }
     }
@@ -556,7 +600,7 @@ function StudyApp({
         () => startEnglishPlayback(activeWord.id, activeWord.word),
       ),
       showMeaning: () => setFlipped(true),
-      playMandarin: mandarinAutoplay && activeMeaningSections?.primary
+      playMandarin: (mandarinAutoplay || pronunciationMode === 'detailed') && activeMeaningSections?.primary
         ? () => awaitLatestPlayback(
             mandarinPlaybackRef,
             () => startMandarinPlayback(activeWord.id, activeMeaningSections.primary),
@@ -565,7 +609,10 @@ function StudyApp({
       wait,
       pauseAfterSpeechMs: PAUSE_AFTER_SPEECH_MS,
     }).then((shouldAdvance) => {
-      if (!shouldAdvance) return
+      if (!shouldAdvance) {
+        if (isActive()) setAutoPlay(false)
+        return
+      }
       if (cardIndex >= studyWords.length - 1) {
         setAutoPlay(false)
         setFlipped(true)
@@ -598,6 +645,7 @@ function StudyApp({
     dailyReview,
     favoriteReview,
     mandarinAutoplay,
+    pronunciationMode,
     query,
     rootFilter,
     selectedPart,
@@ -900,6 +948,16 @@ function StudyApp({
     setAutoPlay(true)
   }
 
+  const changePronunciationMode = (mode: PronunciationMode) => {
+    if (mode === pronunciationMode) return
+    unlockAudio()
+    stopPronunciation()
+    setFlipped(false)
+    setListeningComplete(false)
+    setPronunciationMode(mode)
+    try { window.localStorage.setItem(PRONUNCIATION_MODE_KEY, mode) } catch { /* Device preference is optional. */ }
+  }
+
   const toggleMandarinAutoplay = () => {
     unlockAudio()
     const nextValue = !mandarinAutoplay
@@ -907,7 +965,7 @@ function StudyApp({
     window.localStorage.setItem(MANDARIN_AUTOPLAY_KEY, nextValue ? 'on' : 'off')
     if (!nextValue) {
       mandarinRequestRef.current += 1
-      window.speechSynthesis?.cancel()
+      cancelSpeech()
       setMandarinStatus('idle')
     }
   }
@@ -932,7 +990,7 @@ function StudyApp({
   useEffect(() => {
     const handleKey = (event: KeyboardEvent) => {
       const target = event.target as HTMLElement | null
-      if (target?.tagName === 'INPUT' || target?.tagName === 'SELECT') return
+      if (target?.closest('input, select, button, textarea, summary')) return
       if (cardMode === 'quiz') return
       if (event.key === 'ArrowLeft') moveCard(-1)
       if (event.key === 'ArrowRight') moveCard(1)
@@ -1254,6 +1312,15 @@ function StudyApp({
             </div>
           </div>
         </details>
+        {cardMode === 'flashcard' && (
+          <div className="pronunciation-mode-panel">
+            <div className="study-sequence-tabs" role="group" aria-label="發音模式">
+              <button type="button" aria-pressed={pronunciationMode === 'general'} className={pronunciationMode === 'general' ? 'is-active' : ''} onClick={() => changePronunciationMode('general')}>一般發音</button>
+              <button type="button" aria-pressed={pronunciationMode === 'detailed'} className={pronunciationMode === 'detailed' ? 'is-active' : ''} onClick={() => changePronunciationMode('detailed')}>詳細發音</button>
+            </div>
+            {pronunciationMode === 'detailed' && <p>單字 → 逐字母拼讀 → 單字 → 翻面念中文</p>}
+          </div>
+        )}
         {cardMode === 'flashcard' && <div className={`autoplay-panel ${autoPlay ? 'is-playing' : ''}`}>
           <button aria-pressed={autoPlay} className="autoplay-toggle" onClick={toggleAutoPlay} type="button">
             {autoPlay ? <Pause size={18} /> : <Play size={18} />}
@@ -1276,7 +1343,7 @@ function StudyApp({
             </select>
           </label>
         </div>}
-        {cardMode === 'flashcard' && (
+        {cardMode === 'flashcard' && pronunciationMode === 'general' && (
           <div className={`mandarin-audio-panel ${mandarinAutoplay ? 'is-enabled' : ''}`}>
             <button aria-pressed={mandarinAutoplay} onClick={toggleMandarinAutoplay} type="button">
               <Volume2 size={18} aria-hidden="true" />
@@ -1401,14 +1468,14 @@ function StudyApp({
                     onClick={(event) => {
                       event.stopPropagation()
                       unlockAudio()
-                      startEnglishPlayback(activeWord.id, activeWord.word)
+                      startEnglishPlayback(activeWord.id, activeWord.word, activeMeaningSections?.primary)
                     }}
                     type="button"
                   >
                     {pronunciationStatus === 'loading' ?
                       <LoaderCircle className="pronounce-spinner" size={17} /> :
                       <Volume2 size={17} />}
-                    <span aria-live="polite">{pronunciationLabel}</span>
+                    <span aria-live="polite">{spellingLetter ? `拼讀 ${spellingLetter}` : pronunciationLabel}</span>
                   </button>
                 </div>
                 <p className="flip-hint"><RotateCcw size={14} /> 輕觸翻面 · 左右滑動換字</p>
