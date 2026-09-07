@@ -1415,13 +1415,10 @@ function StudyApp({
               </div>
             ) : (
               <div className="card-back">
-                <div className="root-label">
-                  <span>字根</span>
-                  <strong>{activeWord.root === 'S' ? 'S · 無字根' : activeWord.root}</strong>
-                </div>
+                <h2 className="card-back-word" lang="en">{activeWord.word}</h2>
                 <div className="detail-block meaning-block">
                   <span>中文意思</span>
-                  <h2>{activeMeaningSections?.primary ?? activeWord.meaning}</h2>
+                  <h3>{activeMeaningSections?.primary ?? activeWord.meaning}</h3>
                   <button
                     aria-label="播放中文發音"
                     className={`mandarin-pronounce-button status-${mandarinStatus}`}
@@ -1437,6 +1434,10 @@ function StudyApp({
                       <Volume2 size={16} aria-hidden="true" />}
                     <span aria-live="polite">{mandarinLabel}</span>
                   </button>
+                </div>
+                <div className="detail-block root-label">
+                  <span>字根</span>
+                  <strong>{activeWord.root === 'S' ? 'S · 無字根' : activeWord.root}</strong>
                 </div>
                 {activeMeaningSections?.synonyms.length ? (
                   <div className="detail-block synonym-block">
