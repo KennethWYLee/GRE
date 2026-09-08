@@ -28,6 +28,7 @@ import {
   X,
 } from 'lucide-react'
 import { Button } from './components/ui/button'
+import { WordHeading } from './WordHeading'
 import { AccountAccess, type ApprovedSession } from './AccountAccess'
 import { apiFetch } from './api-client'
 import { runAutoplayCard } from './autoplay'
@@ -1426,7 +1427,7 @@ function StudyApp({
               </div>
             ) : (
               <div className="quiz-prompt">
-                <h2>{activeWord.word}</h2>
+                <WordHeading word={activeWord.word} />
                 {activeWord.pronunciation && <p>/{activeWord.pronunciation}/</p>}
               </div>
             )}
@@ -1490,7 +1491,7 @@ function StudyApp({
                   </span>
                 </div>
                 <div className="word-block">
-                  <h2>{activeWord.word}</h2>
+                  <WordHeading word={activeWord.word} />
                   {activeWord.pronunciation && <p>/{activeWord.pronunciation}/</p>}
                   <button
                     aria-label={`播放 ${activeWord.word} 的英文發音`}
@@ -1512,7 +1513,7 @@ function StudyApp({
               </div>
             ) : (
               <div className="card-back">
-                <h2 className="card-back-word" lang="en">{activeWord.word}</h2>
+                <WordHeading className="card-back-word" word={activeWord.word} />
                 <div className="detail-block meaning-block">
                   <span>中文意思</span>
                   <h3>{activeMeaningSections?.primary ?? activeWord.meaning}</h3>
