@@ -24,6 +24,7 @@
 
 - 五份學習卡自由選擇
 - 正反面 Flashcard：音標、中文、英文定義、例句與字根
+- 英文單字依可用寬度自動縮小並保持單行；詞性使用 `n.`、`v.`、`adj.` 等簡寫，放在音標或中文意思標題旁，不占用單字的寬度
 - 卡片背面將來源中的同義字、反義字與記憶提示分開呈現，資料檢查會確認每段 `[類]` 同義字完整保留
 - 英文一律使用裝置提供的高品質 `en-US` 合成語音，優先選擇 Natural、Neural、Premium、Enhanced 或 Google US English 等自然語音
 - 可選擇翻到解釋時是否自動播放 AI／裝置合成中文發音，設定保存在目前裝置，亦可在卡片背面手動播放
@@ -64,6 +65,16 @@ pnpm run data:export
 ```
 
 GRE 單字資料的原始 PDF、工作簿與密碼不會納入此 repository。
+
+## 詞性資料
+
+兩本字書的詞性來自 Princeton WordNet 3.0 的完整單字索引；未收錄的 18 個字另行核對，來源見 `data/parts-of-speech-supplement.json`。同一單字的多種詞性以 `/` 並列。這是字典收錄的詞性，不是逐句判斷例句中的用法，也不宣稱涵蓋所有字典的每種用法。中文解釋、單字拼寫與學習進度識別碼均保持不變。
+
+可重建的索引與來源檔案 SHA-256 見 `data/parts-of-speech.json`；授權全文隨網站保存在 `public/licenses/wordnet.txt`。依該檔記錄的網址下載並核對 WordNet ZIP，解壓後執行 `node scripts/import-parts-of-speech.mjs PATH_TO_WORDNET`，再執行 `node scripts/repair-vocabulary.mjs`。原始工作簿匯出流程亦會帶入同一份詞性索引。
+
+核對時發現原中文解釋中 `drollness` 寫作「滑稽的」，但字典明確列為名詞；`mitigant` 的形容詞用法已被所查字典標為舊用法。此次只補詞性，不擅自改寫原教材解釋。`cosseted`、`flagged` 按所查字典列為動詞變化形式，未把原形名詞的詞性套用到這些字形。
+
+來源：[WordNet 檔案格式](https://wordnet.princeton.edu/documentation/wndb5wn)、[WordNet 授權](https://wordnet.princeton.edu/license-and-commercial-use)、[droll／drollness](https://www.merriam-webster.com/dictionary/droll)、[mitigant](https://www.merriam-webster.com/dictionary/mitigant)。
 
 ## 英文發音
 

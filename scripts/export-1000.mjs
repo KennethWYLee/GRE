@@ -3,6 +3,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import XLSX from "xlsx";
 import { parseDetails, correctKnownTypos } from './lib/vocabulary-details.mjs';
+import { getPartOfSpeech } from './lib/parts-of-speech.mjs';
 
 const projectDir = fileURLToPath(new URL("..", import.meta.url));
 const workbookPath = process.env.GRE_1000_SOURCE_XLSX
@@ -177,6 +178,7 @@ for (const bin of bins) {
         frequency: row.frequency,
         word: row.word,
         ...parseDetails(row.details),
+        partOfSpeech: getPartOfSpeech(row.word),
       });
     }
 
@@ -194,6 +196,7 @@ for (const bin of bins) {
         frequency: row.frequency,
         word: row.word,
         ...parseDetails(row.details),
+        partOfSpeech: getPartOfSpeech(row.word),
       });
       sIndex += 1;
     }

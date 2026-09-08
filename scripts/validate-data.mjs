@@ -1,5 +1,6 @@
 import fs from "node:fs/promises";
 import { correctKnownTypos, primaryEntry, parseDetails } from './lib/vocabulary-details.mjs';
+import { getPartOfSpeech } from './lib/parts-of-speech.mjs';
 
 function assert(condition, message) {
   if (!condition) throw new Error(message);
@@ -20,6 +21,16 @@ const decks = [
   { file: "../data/vocabulary.json", deckId: "words2000", totalWords: 2078 },
 ];
 const results = [];
+
+// Check exact word forms, not a related headword or its definition's label.
+assert(getPartOfSpeech('aerial') === 'n./adj.', 'Keep both aerial uses')
+assert(getPartOfSpeech('falsification') === 'n.', 'Do not use the verb label of falsify')
+assert(getPartOfSpeech('verified') === 'adj.', 'Do not use the verb label of verify')
+assert(getPartOfSpeech('façade') === 'n.', 'Resolve the accented spelling')
+assert(getPartOfSpeech('faux pas') === 'n.', 'Resolve a multiword entry')
+assert(getPartOfSpeech('drollness') === 'n.', 'Do not infer adjective from the Chinese gloss')
+assert(getPartOfSpeech('cosseted') === 'v.', 'Do not inherit the noun label of cosset')
+assert(getPartOfSpeech('albeit') === 'conj.', 'Include the conjunction outside WordNet categories')
 
 const withoutExample = parseDetails('[test] | [義] 稀釋 | [記] 先加水 | [英] v. make thinner')
 assert(withoutExample.example === '', 'Missing example must stay empty')
@@ -55,6 +66,8 @@ for (const expected of decks) {
   }
 
   for (const word of data.words) {
+    assert(/^(?:n|v|adj|adv|conj)\.(?:\/(?:n|v|adj|adv|conj)\.)*$/.test(word.partOfSpeech), `Missing or invalid part of speech: ${word.word}`)
+    assert(word.partOfSpeech === getPartOfSpeech(word.word), `Part of speech differs from verified record: ${word.word}`)
     for (const [label, field] of [['例', 'example'], ['英', 'definition'], ['記', 'memoryNotes']]) {
       const expected = taggedSections(primaryEntry(word.raw), label).map(correctKnownTypos)
       const joiner = label === '記' ? '；' : ' | '

@@ -157,6 +157,8 @@
 .word-block { min-width: 0; margin: auto 0; text-align: center; }
 .word-heading { width: 100%; min-width: 0; white-space: nowrap; overflow-wrap: normal; word-break: normal; hyphens: none; }
 .word-heading > span { display: inline-block; }
+.word-meta { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: center; gap: 4px 10px; line-height: 1.35; }
+.word-pos { font-family: var(--sans); font-size: .875rem; font-weight: 500; letter-spacing: 0; white-space: nowrap; }
 .word-block h2 { margin: 0; font-family: var(--display); font-size: clamp(3rem, 11vw, 6.2rem); font-weight: 500; letter-spacing: -.05em; line-height: .95; }
 .word-block p { margin: 18px 0 0; color: var(--muted); font-family: var(--display); font-size: 1.05rem; }
 .pronounce-button { display: inline-flex; min-height: 42px; align-items: center; justify-content: center; gap: 8px; margin-top: 22px; padding: 0 16px; border: 1px solid var(--ink); background: transparent; color: var(--ink); cursor: pointer; font-family: var(--sans); font-size: .7rem; font-weight: 800; letter-spacing: .04em; transition: background-color 140ms ease, color 140ms ease; }

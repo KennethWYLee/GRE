@@ -1,0 +1,23 @@
+{
+  "retrievedAt": "2026-09-08",
+  "entries": {
+    "begrudging": { "label": "adj./v.", "source": "https://www.merriam-webster.com/dictionary/begrudging" },
+    "byline": { "label": "n./v.", "source": "https://www.merriam-webster.com/dictionary/byline" },
+    "impeachable": { "label": "adj.", "source": "https://www.merriam-webster.com/dictionary/impeachable" },
+    "monolog": { "label": "n.", "source": "https://www.merriam-webster.com/dictionary/monologue", "note": "Listed spelling variant of monologue." },
+    "overarching": { "label": "adj.", "source": "https://www.merriam-webster.com/dictionary/overarching" },
+    "albeit": { "label": "conj.", "source": "data/vocabulary.json", "note": "The original English definition explicitly labels this conjunction." },
+    "cosseted": { "label": "v.", "source": "https://www.merriam-webster.com/thesaurus/cosseted", "note": "Inflected form of cosset; do not copy the noun label of the uninflected headword." },
+    "drollness": { "label": "n.", "source": "https://www.merriam-webster.com/dictionary/droll", "note": "Explicit noun derivative. The existing Chinese gloss is adjective-shaped; it has not been rewritten in this change." },
+    "enfetter": { "label": "v.", "source": "https://www.merriam-webster.com/dictionary/enfetter" },
+    "idolatrize": { "label": "v.", "source": "https://www.merriam-webster.com/dictionary/idolatrize" },
+    "flagged": { "label": "v.", "source": "https://www.merriam-webster.com/thesaurus/flagged", "note": "Past tense of flag, including the sense of losing vigor." },
+    "imitable": { "label": "adj.", "source": "https://www.merriam-webster.com/dictionary/imitable" },
+    "mitigant": { "label": "n./adj.", "source": "https://www.merriam-webster.com/dictionary/mitigant", "note": "Noun headword; the etymology explicitly records the obsolete adjective used by the original Chinese gloss." },
+    "sequacious": { "label": "adj.", "source": "https://www.merriam-webster.com/dictionary/sequacious" },
+    "valorize": { "label": "v.", "source": "https://www.merriam-webster.com/dictionary/valorize" },
+    "scalding": { "label": "adj.", "source": "data/vocabulary.json", "note": "The original English definition explicitly labels this adjective." },
+    "felicific": { "label": "adj.", "source": "https://www.merriam-webster.com/dictionary/felicific" },
+    "xenophobe": { "label": "n.", "source": "https://www.merriam-webster.com/dictionary/xenophobe" }
+  }
+}

@@ -97,6 +97,7 @@ type VocabularyWord = {
   frequency: string
   word: string
   pronunciation: string
+  partOfSpeech?: string
   meaning: string
   example: string
   definition: string
@@ -108,6 +109,16 @@ type VocabularyData = {
   parts: PartSummary[]
   rootGroups: RootGroup[]
   words: VocabularyWord[]
+}
+
+function WordMetadata({ word }: { word: Pick<VocabularyWord, 'pronunciation' | 'partOfSpeech'> }) {
+  if (!word.pronunciation && !word.partOfSpeech) return null
+  return (
+    <p className="word-meta">
+      {word.partOfSpeech && <span className="word-pos" aria-label={`詞性 ${word.partOfSpeech}`}>{word.partOfSpeech}</span>}
+      {word.pronunciation && <span>/{word.pronunciation}/</span>}
+    </p>
+  )
 }
 
 const SEQUENCE_MODE_KEY = 'gre-roots-sequence-mode-v1'
@@ -1428,7 +1439,7 @@ function StudyApp({
             ) : (
               <div className="quiz-prompt">
                 <WordHeading word={activeWord.word} />
-                {activeWord.pronunciation && <p>/{activeWord.pronunciation}/</p>}
+                <WordMetadata word={activeWord} />
               </div>
             )}
 
@@ -1492,7 +1503,7 @@ function StudyApp({
                 </div>
                 <div className="word-block">
                   <WordHeading word={activeWord.word} />
-                  {activeWord.pronunciation && <p>/{activeWord.pronunciation}/</p>}
+                  <WordMetadata word={activeWord} />
                   <button
                     aria-label={`播放 ${activeWord.word} 的英文發音`}
                     className={`pronounce-button status-${pronunciationStatus}`}
@@ -1515,7 +1526,7 @@ function StudyApp({
               <div className="card-back">
                 <WordHeading className="card-back-word" word={activeWord.word} />
                 <div className="detail-block meaning-block">
-                  <span>中文意思</span>
+                  <span>中文意思{activeWord.partOfSpeech && <small className="word-pos"> · {activeWord.partOfSpeech}</small>}</span>
                   <h3>{activeMeaningSections?.primary ?? activeWord.meaning}</h3>
                   <button
                     aria-label="播放中文發音"
