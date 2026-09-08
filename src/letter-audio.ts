@@ -17,7 +17,7 @@ export function createLetterAudioPlayer(
     if (!loading) {
       const audioContext = getContext()
       loading = Promise.all([...'ABCDEFGHIJKLMNOPQRSTUVWXYZ'].map(async (letter) => {
-        const bytes = await fetchAudio(`/audio/letters-v1/${letter}.wav`)
+        const bytes = await fetchAudio(`/audio/letters-v2/${letter}.wav`)
         return [letter, await audioContext.decodeAudioData(bytes)] as const
       })).then((entries) => new Map(entries)).catch((error) => {
         loading = null

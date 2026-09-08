@@ -1348,7 +1348,7 @@ function StudyApp({
               <button type="button" aria-pressed={pronunciationMode === 'general'} className={pronunciationMode === 'general' ? 'is-active' : ''} onClick={() => changePronunciationMode('general')}>一般發音</button>
               <button type="button" aria-pressed={pronunciationMode === 'detailed'} className={pronunciationMode === 'detailed' ? 'is-active' : ''} onClick={() => changePronunciationMode('detailed')}>詳細發音</button>
             </div>
-            {pronunciationMode === 'detailed' && <p>單字 → 逐字母拼讀 → 單字 → 翻面念中文<br /><a href="/audio/letters-v1/attribution.json" target="_blank" rel="noreferrer">字母錄音來源與授權</a></p>}
+            {pronunciationMode === 'detailed' && <p>單字 → 逐字母拼讀 → 單字 → 翻面念中文<br /><a href="/audio/letters-v2/attribution.json" target="_blank" rel="noreferrer">字母錄音來源與授權</a></p>}
           </div>
         )}
         {cardMode === 'flashcard' && <div className={`autoplay-panel ${autoPlay ? 'is-playing' : ''}`}>

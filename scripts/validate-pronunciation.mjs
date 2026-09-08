@@ -37,18 +37,35 @@ assert.equal(selectMandarinVoice([cn, { name: 'Traditional', lang: 'zh-Hant' }])
 assert.deepEqual(spellingLetters('apple'), [...'APPLE'])
 assert.deepEqual(spellingLetters('co-operate'), [...'COOPERATE'])
 assert.deepEqual(spellingLetters('naïve'), [...'NAIVE'])
-const recordings = JSON.parse(readFileSync(new URL('../public/audio/letters-v1/attribution.json', import.meta.url)))
+const recordings = JSON.parse(readFileSync(new URL('../public/audio/letters-v2/attribution.json', import.meta.url)))
 const audioVerification = JSON.parse(readFileSync(new URL('../docs/letter-audio-verification.json', import.meta.url)))
+const audioCleanup = JSON.parse(readFileSync(new URL('../docs/letter-audio-cleanup.json', import.meta.url)))
 assert.ok(audioVerification.results.every((result) => result.matches))
 assert.equal(Object.keys(recordings).join(''), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ')
 for (const [letter, recording] of Object.entries(recordings)) {
-  const wav = readFileSync(new URL(`../public/audio/letters-v1/${letter}.wav`, import.meta.url))
+  const wav = readFileSync(new URL(`../public/audio/letters-v2/${letter}.wav`, import.meta.url))
   assert.equal(createHash('sha256').update(wav).digest('hex'), recording.sha256)
   assert.equal(recording.sha256, audioVerification.recordingHashes[letter], 'Ship only the independently verified audio bytes')
+  assert.equal(recording.sha256, audioCleanup.letters[letter].sha256)
   assert.equal(wav.toString('ascii', 0, 4), 'RIFF')
   assert.equal(wav.toString('ascii', 8, 12), 'WAVE')
   assert.equal(wav.readUInt32LE(24), 24000)
-  assert.ok(recording.duration > .15 && recording.duration < 2)
+  assert.equal(recording.duration, .5, `${letter}: equal letter duration`)
+  // The generator emits canonical mono 16-bit PCM: check the actual samples.
+  assert.equal(wav.readUInt16LE(22), 1)
+  assert.equal(wav.readUInt16LE(34), 16)
+  assert.equal(wav.toString('ascii', 36, 40), 'data')
+  assert.equal(wav.readUInt32LE(40), 24000 * .5 * 2)
+  let squareSum = 0
+  for (let offset = 44; offset < wav.length; offset += 2) {
+    assert.ok(Math.abs(wav.readInt16LE(offset)) < 32767, `${letter}: no clipping`)
+    squareSum += (wav.readInt16LE(offset) / 32768) ** 2
+  }
+  assert.ok(Math.abs(Math.sqrt(squareSum / 12000) - .13 * Math.sqrt(.96)) < .001, `${letter}: consistent RMS level`)
+  for (let index = 0; index < 240; index += 1) {
+    assert.equal(wav.readInt16LE(44 + index * 2), 0, `${letter}: quiet onset`)
+    assert.equal(wav.readInt16LE(wav.length - (index + 1) * 2), 0, `${letter}: quiet end`)
+  }
   assert.ok(recording.author && recording.licenseUrl && recording.source)
 }
 const durations = Object.fromEntries(Object.entries(recordings).map(([c, r]) => [c, r.duration]))
@@ -59,6 +76,7 @@ for (let index = 1; index < timeline.length; index += 1) {
   assert.ok(Math.abs(timeline[index].start - previous.start - previous.duration - .1) < 1e-9)
 }
 assert.throws(() => letterTimeline(['A'], {}), /Missing letter audio/)
+assert.ok(audioCleanup.letters.N.leadInNoiseBeforeDbfs - audioCleanup.letters.N.leadInNoiseAfterFilteringDbfs >= 10)
 
 // Every stage is awaited: English (including repeated letters and final word)
 // must finish before the card flips, and Chinese must finish before advancing.
@@ -219,6 +237,8 @@ console.log(JSON.stringify({
   autoplayWaitsForSpellingAndMandarin: true,
   failedSpeechStopsAutoplay: true,
   recordedLetters: 26,
+  uniformLetterDurationSeconds: .5,
+  noClippedSamplesOrBoundaryClicks: true,
   preloadedLetters: true,
   letterGapSeconds: .1,
   separateRepeatedLetters: true,
