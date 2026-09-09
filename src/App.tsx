@@ -555,10 +555,12 @@ function StudyApp({
   const cardIndex = Math.max(0, Math.min(requestedCardIndex, studyWords.length - 1))
   const activeWord = studyWords[cardIndex]
   useEffect(() => {
-    if (cardMode !== 'flashcard') return
     // Image loading is independent of the speech and automatic card timing.
-    preloadWordIllustrations(studyWords.slice(cardIndex, cardIndex + 11).map((word) => word.id))
-  }, [cardIndex, cardMode, studyWords])
+    preloadWordIllustrations(cardMode === 'flashcard' && selectedPart !== null
+      ? studyWords.slice(cardIndex, cardIndex + 11).map((word) => word.id)
+      : [])
+  }, [cardIndex, cardMode, selectedPart, studyWords])
+  useEffect(() => () => preloadWordIllustrations([]), [])
   const activeMeaningSections = useMemo(
     () => {
       if (!activeWord) return null

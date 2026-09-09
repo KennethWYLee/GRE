@@ -1,43 +1,56 @@
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
-import { WORD_ILLUSTRATIONS, getWordIllustration, preloadWordIllustrations } from '../src/word-illustrations.ts'
+import { createHash } from 'node:crypto'
+import { WORD_ILLUSTRATIONS, getWordIllustration } from '../src/word-illustrations.ts'
+import './validate-image-loading.mjs'
 
 const deck = JSON.parse(readFileSync(new URL('../data/vocabulary-1000.json', import.meta.url)))
 const firstTen = deck.words.filter((word) => word.part === 1).sort((a, b) => a.deckPosition - b.deckPosition).slice(0, 10)
-assert.deepEqual(Object.keys(WORD_ILLUSTRATIONS), firstTen.map((word) => word.id))
+const partsFourAndFive = deck.words.filter((word) => [4, 5].includes(word.part)).sort((a, b) => a.part - b.part || a.deckPosition - b.deckPosition)
+const expected = [...firstTen, ...partsFourAndFive]
+assert.equal(partsFourAndFive.filter((word) => word.part === 4).length, 217)
+assert.equal(partsFourAndFive.filter((word) => word.part === 5).length, 217)
+assert.deepEqual(Object.keys(WORD_ILLUSTRATIONS).sort(), expected.map((word) => word.id).sort())
+const records = ['first10', 'parts4-5'].flatMap((name) => JSON.parse(readFileSync(new URL(`../docs/word-illustrations-${name}.json`, import.meta.url))).assets)
+assert.equal(records.length, expected.length)
+const byId = new Map(records.map((asset) => [asset.wordId, asset]))
+assert.equal(byId.size, expected.length)
+const uniqueImages = new Map()
 let totalBytes = 0
-for (const word of firstTen) {
+for (const word of expected) {
   const illustration = getWordIllustration(word.id)
+  const record = byId.get(word.id)
   assert.equal(illustration.word, word.word, 'Each image must follow its word ID, including after shuffling')
+  assert.equal(record.word, word.word)
+  assert.equal(illustration.src, record.output)
   assert.ok(illustration.alt.length > 10, 'Images need a meaningful Chinese description')
-  assert.match(illustration.src, /^\/images\/words\/[a-z]+-v1\.webp$/)
+  assert.match(illustration.src, /^\/images\/words\/[a-z-]+(?:-word1000-\d+)?-v1\.webp$/)
   const image = readFileSync(new URL(`../public${illustration.src}`, import.meta.url))
   assert.equal(image.toString('ascii', 0, 4), 'RIFF')
   assert.equal(image.toString('ascii', 8, 12), 'WEBP')
-  assert.ok(image.length < 150_000, 'Keep each thumbnail small for mobile loading')
-  totalBytes += image.length
+  assert.ok(image.length < 100_000, 'Keep each thumbnail below 100 KB for mobile loading')
+  assert.equal(record.width, 480)
+  assert.equal(record.height, 480)
+  assert.equal(image.length, record.bytes)
+  assert.equal(createHash('sha256').update(image).digest('hex'), record.sha256)
+  assert.ok(record.prompt && record.inspection)
+  if (word.part !== 1) {
+    assert.equal(illustration.alt, record.alt)
+    assert.equal(record.part, word.part)
+    assert.equal(record.deckPosition, word.deckPosition)
+    assert.equal(record.sourcePath, undefined, 'Do not publish private absolute paths')
+    assert.equal(record.preparedPath, undefined)
+    if (record.reusedFromWordId) {
+      assert.ok(record.reuseReason)
+      assert.equal(record.output, byId.get(record.reusedFromWordId).output)
+    }
+  }
+  if (!uniqueImages.has(illustration.src)) totalBytes += image.length
+  uniqueImages.set(illustration.src, image.length)
 }
-assert.equal(getWordIllustration(deck.words.find((word) => word.part === 1 && word.deckPosition === 11).id), null)
-assert.equal(getWordIllustration('word-124'), null, 'The 2000-word book is outside this image sample')
+const expectedIds = new Set(expected.map((word) => word.id))
+for (const word of deck.words) if (!expectedIds.has(word.id)) assert.equal(getWordIllustration(word.id), null)
+assert.equal(getWordIllustration('word-124'), null, 'The 2000-word book remains outside the illustration scope')
+assert.equal(getWordIllustration('unknown-word'), null)
 
-const originalImage = globalThis.Image
-const requestedImages = []
-globalThis.Image = class {
-  constructor() { requestedImages.push(this) }
-}
-try {
-  const ids = firstTen.map((word) => word.id)
-  preloadWordIllustrations([...ids, 'unknown-word'])
-  assert.equal(requestedImages.length, 10)
-  preloadWordIllustrations([...ids].reverse())
-  assert.equal(requestedImages.length, 10, 'Repeated preloading must not issue duplicate requests')
-  requestedImages[0].onerror()
-  preloadWordIllustrations([ids[0]])
-  assert.equal(requestedImages.length, 11, 'Failed preloading must allow a later retry')
-  assert.ok(requestedImages.every((image) => image.decoding === 'async'))
-} finally {
-  if (originalImage === undefined) delete globalThis.Image
-  else globalThis.Image = originalImage
-}
-
-console.log(JSON.stringify({ valid: true, images: firstTen.length, totalBytes, limitedToFirstTen: true, preloadDeduplication: true, retryAfterFailure: true }, null, 2))
+console.log(JSON.stringify({ valid: true, illustratedCards: expected.length, part4: 217, part5: 217, uniqueImages: uniqueImages.size, totalBytes, maxImageBytes: Math.max(...uniqueImages.values()) }, null, 2))

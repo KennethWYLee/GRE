@@ -15,6 +15,7 @@ export function IllustratedMeaning({ wordId, children }: { wordId: string; child
           className="word-illustration"
           decoding="async"
           draggable={false}
+          fetchPriority="low"
           height={480}
           onError={() => setFailedSource(illustration.src)}
           src={illustration.src}
