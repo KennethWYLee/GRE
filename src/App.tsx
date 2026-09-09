@@ -29,6 +29,8 @@ import {
 } from 'lucide-react'
 import { Button } from './components/ui/button'
 import { WordHeading } from './WordHeading'
+import { IllustratedMeaning } from './IllustratedMeaning'
+import { preloadWordIllustrations } from './word-illustrations'
 import { AccountAccess, type ApprovedSession } from './AccountAccess'
 import { apiFetch } from './api-client'
 import { runAutoplayCard } from './autoplay'
@@ -552,6 +554,11 @@ function StudyApp({
   )
   const cardIndex = Math.max(0, Math.min(requestedCardIndex, studyWords.length - 1))
   const activeWord = studyWords[cardIndex]
+  useEffect(() => {
+    if (cardMode !== 'flashcard') return
+    // Image loading is independent of the speech and automatic card timing.
+    preloadWordIllustrations(studyWords.slice(cardIndex, cardIndex + 11).map((word) => word.id))
+  }, [cardIndex, cardMode, studyWords])
   const activeMeaningSections = useMemo(
     () => {
       if (!activeWord) return null
@@ -1512,7 +1519,7 @@ function StudyApp({
             ) : (
               <div className="card-back">
                 <WordHeading className="card-back-word" word={activeWord.word} />
-                <div className="detail-block meaning-block">
+                <IllustratedMeaning key={activeWord.id} wordId={activeWord.id}>
                   <span>中文意思{activeWord.partOfSpeech && <small className="word-pos"> · {activeWord.partOfSpeech}</small>}</span>
                   <h3>{activeMeaningSections?.primary ?? activeWord.meaning}</h3>
                   <button
@@ -1530,7 +1537,7 @@ function StudyApp({
                       <Volume2 size={16} aria-hidden="true" />}
                     <span aria-live="polite">{mandarinLabel}</span>
                   </button>
-                </div>
+                </IllustratedMeaning>
                 <div className="detail-block root-label">
                   <span>字根</span>
                   <strong>{activeWord.root === 'S' ? 'S · 無字根' : activeWord.root}</strong>

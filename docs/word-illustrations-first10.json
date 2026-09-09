@@ -1,0 +1,157 @@
+{
+  "version": 1,
+  "createdAt": "2026-09-09",
+  "scope": "1000 字 Part 1 固定順序前 10 字；不影響其他單字或 2000 字字書。",
+  "generation": {
+    "tool": "built-in image_gen",
+    "calls": 10,
+    "retries": 0,
+    "description": "AI 生成的虛構圖片，不是真實事件照片。每張只表達教材中的一個意思，不能取代完整中文解釋。"
+  },
+  "preparation": {
+    "script": "scripts/prepare-word-image.mjs",
+    "format": "WebP",
+    "width": 480,
+    "height": 480,
+    "quality": 78,
+    "effort": 6,
+    "alterations": "僅縮小與壓縮，未裁切或改動畫面內容。"
+  },
+  "verification": {
+    "mapping": "以資料中的 id 對應圖片；已確認等於 Part 1 按 deckPosition 排序的前 10 字。",
+    "assets": "10 張原圖由圖片生成代理檢視；主代理另檢視選用圖片。",
+    "browser": "尚未執行瀏覽器版面或手機實機測試。"
+  },
+  "assets": [
+    {
+      "wordId": "word1000-124",
+      "word": "prodigal",
+      "output": "/images/words/prodigal-v1.webp",
+      "width": 480,
+      "height": 480,
+      "bytes": 28544,
+      "sourceSha256": "c03070f4aa14fe1ff61bd6635dcc978a5211df50bc306d43fd961fdc7bb2f13c",
+      "sha256": "c23b41913a66be7e1e7d16da701c68eaac4f1e8d339bddf37defd08a80418621",
+      "originalFilename": "exec-f4316da8-d8b2-46f2-811a-830800b3f8a4.png",
+      "prompt": "Use case: illustration-story.\nAsset type: square word-meaning picture displayed about 100–160 CSS pixels beside a Chinese definition on a vocabulary flashcard.\nStyle/medium: ONE standalone square, clean semi-realistic editorial illustration with natural proportions, simple clear scene and strong recognizable focal action, minimal background clutter. Adult learning audience, not babyish clip art.\nLighting/mood: soft natural lighting.\nColor palette: natural greens, warm wood/ochre and blue tones fitting an off-white/dark-green app; scene must remain readable at small size.\nConstraints: Not a UI screenshot. No written words, letters, numerals, arrows, labels, logos, watermark or decorative border. Do not print the target word. Original fictional scene with one concrete meaning cue only, not all dictionary senses.\nPrimary request: prodigal means 非常浪費的、揮霍的, spending resources too freely. A carefree adult frivolously throwing banknotes into the air while surrounded by excessive shopping bags and barely-used luxury purchases. Clear wasteful spending, not donation or charity; no readable currency marks. Simplify background, focus on spender and unnecessary purchases.",
+      "inspection": "Intended wasteful spending cue is clear. Small incidental currency marks and partial gold letter-like marks on a shopping bag; no recognizable brand name. Checkered brown handbag evokes established luxury styling without identifying logo. Not a strict no-text pass; root advised incidental non-salient currency numerals acceptable. Photorealistic style accepted by root."
+    },
+    {
+      "wordId": "word1000-171",
+      "word": "exigent",
+      "output": "/images/words/exigent-v1.webp",
+      "width": 480,
+      "height": 480,
+      "bytes": 43528,
+      "sourceSha256": "b7eb288a768040d93743bf683df7f8dd11730c76ef50f6460f78177464a4348b",
+      "sha256": "e908019ad1533c0d0f04434f5584886b7479f68f315bc96430f387f938ac681c",
+      "originalFilename": "exec-6d7377a9-2b4c-4ad6-8546-20a5c2d316b1.png",
+      "prompt": "Use case: illustration-story.\nAsset type: square word-meaning picture displayed about 100–160 CSS pixels beside a Chinese definition on a vocabulary flashcard.\nStyle/medium: ONE standalone square, clean semi-realistic editorial illustration with natural proportions, simple clear scene and strong recognizable focal action, minimal background clutter. Adult learning audience, not babyish clip art.\nLighting/mood: soft natural lighting.\nColor palette: natural greens, warm wood/ochre and blue tones fitting an off-white/dark-green app; scene must remain readable at small size.\nConstraints: Not a UI screenshot. No written words, letters, numerals, arrows, labels, logos, watermark or decorative border. Do not print the target word. Original fictional scene with one concrete meaning cue only, not all dictionary senses.\nPrimary request: exigent means 緊急的, requiring immediate action. An adult urgently turning the shutoff valve of a burst water pipe with a conspicuous strong jet of water flooding the floor. Urgency is evident from the leak and quick decisive action, no injury or gore, not a medical diagram.",
+      "inspection": "Clear urgent shutoff action, conspicuous strong leak and flooding; no obvious text/brand marks; subject fit passes."
+    },
+    {
+      "wordId": "word1000-529",
+      "word": "agitated",
+      "output": "/images/words/agitated-v1.webp",
+      "width": 480,
+      "height": 480,
+      "bytes": 29878,
+      "sourceSha256": "ffaaa1471b3805f36641ef485a48debbb9d64719cad7b75a0d65c7d329234b7a",
+      "sha256": "4322b55c0c046c47e359638a46f3a62f847b808ff00b178422d763a58cbc5eaf",
+      "originalFilename": "exec-33ddde8a-aa4e-4139-ace7-80444a8b4b13.png",
+      "prompt": "Use case: illustration-story.\nAsset type: square word-meaning picture displayed about 100–160 CSS pixels beside a Chinese definition on a vocabulary flashcard.\nStyle/medium: ONE standalone square, clean semi-realistic editorial illustration with natural proportions, simple clear scene and strong recognizable focal action, minimal background clutter. Adult learning audience, not babyish clip art.\nLighting/mood: soft natural lighting.\nColor palette: natural greens, warm wood/ochre and blue tones fitting an off-white/dark-green app; scene must remain readable at small size.\nConstraints: Not a UI screenshot. No written words, letters, numerals, arrows, labels, logos, watermark or decorative border. Do not print the target word. Original fictional scene with one concrete meaning cue only, not all dictionary senses.\nPrimary request: agitated means 激動的、不安的. A visibly restless adult pacing beside a chair, tense shoulders, worried furrowed brow, hands anxiously clasped. Large readable expression and posture, simple quiet room, no diagnosis labels or floating symbols.",
+      "inspection": "Readable anxious expression, clasped hands and pacing stance beside chair; no obvious text/brand marks; subject fit passes."
+    },
+    {
+      "wordId": "word1000-537",
+      "word": "perennial",
+      "output": "/images/words/perennial-v1.webp",
+      "width": 480,
+      "height": 480,
+      "bytes": 73484,
+      "sourceSha256": "c261c6ced3cd7a41e38780046fe0200f2184cb6ac6a5d3265bdf8f847e32d005",
+      "sha256": "0d45577242a753ef531a8665d55fcac606333f1f630eab551bbd1d08a8461ad8",
+      "originalFilename": "exec-f4c5f80d-88d4-42fb-a6fd-123b8824bbb7.png",
+      "prompt": "Use case: illustration-story.\nAsset type: square word-meaning picture displayed about 100–160 CSS pixels beside a Chinese definition on a vocabulary flashcard.\nStyle/medium: ONE standalone square, clean semi-realistic editorial illustration with natural proportions, simple clear scene and strong recognizable focal action, minimal background clutter. Adult learning audience, not babyish clip art.\nLighting/mood: soft natural lighting.\nColor palette: natural greens, warm wood/ochre and blue tones fitting an off-white/dark-green app; scene must remain readable at small size.\nConstraints: Not a UI screenshot. No written words, letters, numerals, arrows, labels, logos, watermark or decorative border. Do not print the target word. Original fictional scene with one concrete meaning cue only, not all dictionary senses.\nPrimary request: perennial here means 終年的、永久的 / lasting for a long time. A single sturdy evergreen tree remains as the central focal subject while the surroundings subtly show four seasons in four broad quadrants: spring flowers, summer grass, autumn leaves on ground, winter snow. The tree remains green and strong, conveying enduring across seasons. No chart arrows/text. This is a conceptual illustration of lasting, not a botany identification diagram.",
+      "inspection": "Single sturdy evergreen with clear seasonal quadrants and enduring appearance; no text/brand marks; intended conceptual cue passes."
+    },
+    {
+      "wordId": "word1000-19",
+      "word": "belie",
+      "output": "/images/words/belie-v1.webp",
+      "width": 480,
+      "height": 480,
+      "bytes": 26386,
+      "sourceSha256": "d091ac0e3daae19cbfb915c38ed0559c4078c47506459a8b7c693f70d04ead38",
+      "sha256": "b20ca723dc23ac5423c79e7dfb0e6d4a581d5290571a9a2cf4951d14d453719f",
+      "originalFilename": "exec-0dc065d8-59f5-4bfe-81bc-16a31b1597a4.png",
+      "prompt": "Use case: illustration-story.\nAsset type: square word-meaning picture displayed about 100–160 CSS pixels beside a Chinese definition on a vocabulary flashcard.\nStyle/medium: ONE standalone square, clean semi-realistic editorial illustration with natural proportions, simple clear scene and strong recognizable focal action, minimal background clutter. Adult learning audience, not babyish clip art.\nLighting/mood: soft natural lighting.\nColor palette: natural greens, warm wood/ochre and blue tones fitting an off-white/dark-green app; scene must remain readable at small size.\nConstraints: Not a UI screenshot. No written words, letters, numerals, arrows, labels, logos, watermark or decorative border. Do not print the target word. Original fictional scene with one concrete meaning cue only, not all dictionary senses.\nPrimary request: belie means 掩蓋、與表象不一致 / give a false idea. A glossy appealing red apple cut open to reveal a brown rotten core; the shiny beautiful exterior contrasts unmistakably with the spoiled inside. One close-up apple split into two halves, visible shiny skin and rotten core, on simple tabletop. No insects/gore, no extra moral symbols.",
+      "inspection": "Appealing red exterior and unmistakably brown rotten core in two cut halves; no text/brand marks; intended contrast passes."
+    },
+    {
+      "wordId": "word1000-89",
+      "word": "deft",
+      "output": "/images/words/deft-v1.webp",
+      "width": 480,
+      "height": 480,
+      "bytes": 22536,
+      "sourceSha256": "0dc711508a1414d565baf55d1680e54afeb2f5fb0ebf98164cabe85b547e7419",
+      "sha256": "8c12df4b9be3778a891278572290a4878d2f1aa26ab9334caefc1e0087f6e9d5",
+      "originalFilename": "exec-60a14615-4ceb-402a-9874-4b14ff31e4e3.png",
+      "prompt": "Use case: illustration-story.\nAsset type: square word-meaning picture displayed about 100–160 CSS pixels beside a Chinese definition on a vocabulary flashcard.\nStyle/medium: ONE standalone square, clean semi-realistic editorial illustration with natural proportions, simple clear scene and strong recognizable focal action, minimal background clutter. Adult learning audience, not babyish clip art.\nLighting/mood: soft natural lighting.\nColor palette: natural greens, warm wood/ochre and blue tones fitting an off-white/dark-green app; scene must remain readable at small size.\nConstraints: Not a UI screenshot. No written words, letters, numerals, arrows, labels, logos, watermark or decorative border. Do not print the target word. Original fictional scene with one concrete meaning cue only, not all dictionary senses.\nPrimary request: deft means 靈巧的, skillful and quick especially with hands. Close view of a craftsperson's hands dexterously tying a small neat decorative ribbon bow around a modest gift. Hands anatomically natural, clean precise knot visibly forming, simple uncluttered table. Focus manual dexterity, not lavish gift-giving.",
+      "inspection": "Natural-looking hands precisely finishing neat ribbon bow; no text/brand marks; manual skill cue passes."
+    },
+    {
+      "wordId": "word1000-219",
+      "word": "inept",
+      "output": "/images/words/inept-v1.webp",
+      "width": 480,
+      "height": 480,
+      "bytes": 33070,
+      "sourceSha256": "d9e8d723ef51c1c495cb480c4ccfd479fc3820829f37a8bc5ddfe703a58ba89c",
+      "sha256": "f8fadec4fd9f610d5e2fc7437bd3bbb19e3796a45a21cabeb982eac15e34d987",
+      "originalFilename": "exec-31a93950-fa10-4410-b28c-e81a8b99a8e5.png",
+      "prompt": "Use case: illustration-story.\nAsset type: square word-meaning picture displayed about 100–160 CSS pixels beside a Chinese definition on a vocabulary flashcard.\nStyle/medium: ONE standalone square, clean semi-realistic editorial illustration with natural proportions, simple clear scene and strong recognizable focal action, minimal background clutter. Adult learning audience, not babyish clip art.\nLighting/mood: soft natural lighting.\nColor palette: natural greens, warm wood/ochre and blue tones fitting an off-white/dark-green app; scene must remain readable at small size.\nConstraints: Not a UI screenshot. No written words, letters, numerals, arrows, labels, logos, watermark or decorative border. Do not print the target word. Original fictional scene with one concrete meaning cue only, not all dictionary senses.\nPrimary request: inept means 無能的、不恰當的 / unskillful at a task. A novice adult baker ineffectively assembling a lopsided collapsing cake, uneven icing and a spilled bowl, looking confused while holding a spatula awkwardly. Clearly lack of baking skill, not injury, disability, deliberate destruction, or malicious mockery. Compact scene with baker and failed cake.",
+      "inspection": "Novice baker appears confused beside lopsided cake, uneven icing and spilled bowl; no obvious text/brand marks; intended lack-of-task-skill cue passes."
+    },
+    {
+      "wordId": "word1000-224",
+      "word": "apt",
+      "output": "/images/words/apt-v1.webp",
+      "width": 480,
+      "height": 480,
+      "bytes": 38512,
+      "sourceSha256": "c0897b0da3a04ea30d9a9067c875f6ebe2dd70d39933288e9ddd63e4663af003",
+      "sha256": "ba6af6a87b7ac0171c91ccd7f4b624f153aa4ed2fa12e02df432a7b99c6ef5fb",
+      "originalFilename": "exec-82cdf612-df22-4afd-833d-9a9c6dd0a16a.png",
+      "prompt": "Use case: illustration-story.\nAsset type: square word-meaning picture displayed about 100–160 CSS pixels beside a Chinese definition on a vocabulary flashcard.\nStyle/medium: ONE standalone square, clean semi-realistic editorial illustration with natural proportions, simple clear scene and strong recognizable focal action, minimal background clutter. Adult learning audience, not babyish clip art.\nLighting/mood: soft natural lighting.\nColor palette: natural greens, warm wood/ochre and blue tones fitting an off-white/dark-green app; scene must remain readable at small size.\nConstraints: Not a UI screenshot. No written words, letters, numerals, arrows, labels, logos, watermark or decorative border. Do not print the target word. Original fictional scene with one concrete meaning cue only, not all dictionary senses.\nPrimary request: apt here means 適合的 / suitable, appropriate. Close-up of a correctly sized open-ended wrench fitting snugly around a hexagonal bolt, with one plainly oversized wrench set aside. Focus the clearly correct fit of the chosen tool; no person required, no checkmark/cross/arrows/text. Simple tactile metal tools against wood.",
+      "inspection": "Chosen wrench fits the bolt while an oversized wrench lies beside it; no text/brand marks; correct-fit cue passes."
+    },
+    {
+      "wordId": "word1000-393",
+      "word": "adaptive",
+      "output": "/images/words/adaptive-v1.webp",
+      "width": 480,
+      "height": 480,
+      "bytes": 42654,
+      "sourceSha256": "df405991fe73476466b97fb5f7e234f254e86e8037942cc038edf879fc746191",
+      "sha256": "f0e94867b388664715e2a09f36b4c2bca06e3448ae88b8d28397aac55899430b",
+      "originalFilename": "exec-c0a0c63e-5121-4326-9fbb-3f6b727c2f76.png",
+      "prompt": "Use case: illustration-story.\nAsset type: square word-meaning picture displayed about 100–160 CSS pixels beside a Chinese definition on a vocabulary flashcard.\nStyle/medium: ONE standalone square, clean semi-realistic editorial illustration with natural proportions, simple clear scene and strong recognizable focal action, minimal background clutter. Adult learning audience, not babyish clip art.\nLighting/mood: soft natural lighting.\nColor palette: natural greens, warm wood/ochre and blue tones fitting an off-white/dark-green app; scene must remain readable at small size.\nConstraints: Not a UI screenshot. No written words, letters, numerals, arrows, labels, logos, watermark or decorative border. Do not print the target word. Original fictional scene with one concrete meaning cue only, not all dictionary senses.\nPrimary request: adaptive means 適應的. A hiker adjusting to a sudden change from sunshine to rain by putting on a rain jacket and opening an umbrella; show coherent single scene with changing weather in background, hiker now protected and calmly continuing. Make adjustment to conditions the meaning cue, not just a rain fashion portrait. No duplicate limbs, no text.",
+      "inspection": "Changing sunshine/rain and calmly continuing hiker protected by jacket and umbrella. Shows result of adjusting, not literal act of putting on the jacket; usable but less explicit meaning cue. No duplicate limbs or obvious text/brand marks."
+    },
+    {
+      "wordId": "word1000-520",
+      "word": "adept",
+      "output": "/images/words/adept-v1.webp",
+      "width": 480,
+      "height": 480,
+      "bytes": 26524,
+      "sourceSha256": "cae691a9ef2bee20876306156d0bbf5b5e4f283b3ddf5357cc5504ec7c66b668",
+      "sha256": "8da3a2f3dd489cd1ade0ecd4680e31f9f56c77f815c8fc7732ba1c80279178fb",
+      "originalFilename": "exec-4500e14a-740b-4836-9f53-63da62c16649.png",
+      "prompt": "Use case: illustration-story.\nAsset type: square word-meaning picture displayed about 100–160 CSS pixels beside a Chinese definition on a vocabulary flashcard.\nStyle/medium: ONE standalone square, clean semi-realistic editorial illustration with natural proportions, simple clear scene and strong recognizable focal action, minimal background clutter. Adult learning audience, not babyish clip art.\nLighting/mood: soft natural lighting.\nColor palette: natural greens, warm wood/ochre and blue tones fitting an off-white/dark-green app; scene must remain readable at small size.\nConstraints: Not a UI screenshot. No written words, letters, numerals, arrows, labels, logos, watermark or decorative border. Do not print the target word. Original fictional scene with one concrete meaning cue only, not all dictionary senses.\nPrimary request: adept means 熟練的、內行的 / expert. A professional chef confidently and precisely finishing a row of beautifully consistent prepared dishes in an orderly kitchen, fluent posture and precise finishing hand movement. Focus practiced expertise and accomplished results, unlike the novice cake picture. Unbranded clothing and tools, simple uncluttered crop.",
+      "inspection": "Confident chef precisely finishing a row of consistent prepared dishes; no obvious text/brand marks; expert performance cue passes."
+    }
+  ]
+}

@@ -173,11 +173,14 @@
 .card-back { max-height: var(--study-card-height); overflow-y: auto; }
 .card-back-word { margin: 0; color: var(--green); font-family: var(--display); font-size: clamp(2rem, 8vw, 3.5rem); font-weight: 500; letter-spacing: -.035em; line-height: 1.1; }
 .root-label { display: grid; gap: 5px; padding-bottom: 22px; border-bottom: 1px solid var(--line); }
-.root-label span, .detail-block > span { color: var(--green); font-size: .64rem; font-weight: 800; letter-spacing: .14em; text-transform: uppercase; }
+.root-label span, .detail-block > span, .meaning-copy > span { color: var(--green); font-size: .64rem; font-weight: 800; letter-spacing: .14em; text-transform: uppercase; }
 .root-label strong { font-family: var(--display); font-size: 1.2rem; font-weight: 600; }
 .detail-block { padding: 22px 0; border-bottom: 1px solid var(--line); }
 .detail-block:last-child { border-bottom: 0; }
 .meaning-block h3 { margin: 8px 0 0; font-family: var(--display); font-size: clamp(1.8rem, 6.5vw, 2.75rem); font-weight: 600; letter-spacing: -.035em; line-height: 1.15; }
+.meaning-block.has-illustration { display: grid; grid-template-columns: minmax(0, 1fr) clamp(84px, 28%, 156px); align-items: center; gap: 12px; }
+.meaning-copy { min-width: 0; }
+.word-illustration { display: block; width: 100%; height: auto; aspect-ratio: 1; object-fit: contain; border-radius: 3px; }
 .detail-block p { margin: 8px 0 0; color: var(--ink-soft); font-size: .9rem; line-height: 1.65; }
 .synonym-block p, .antonym-block p { font-family: var(--display); font-size: 1rem; }
 .memory-note-block p { color: var(--muted); }
@@ -367,7 +370,7 @@
   .search-box input { font-size: 1rem; }
   .study-stage { padding-top: 12px; }
   .card-front, .card-back { padding: 24px 20px; }
-  .card-topline, .root-label span, .detail-block > span { font-size: .75rem; }
+  .card-topline, .root-label span, .detail-block > span, .meaning-copy > span { font-size: .75rem; }
   .word-block h2 { font-size: clamp(2.8rem, 15vw, 4.4rem); }
   .word-block p { font-size: 1rem; }
   .pronounce-button, .mandarin-pronounce-button { min-height: 44px; font-size: .75rem; }
