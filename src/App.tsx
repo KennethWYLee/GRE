@@ -940,12 +940,14 @@ function StudyApp({
     setQuizComplete(false)
     setCardIndex(0)
     setFlipped(false)
+    resetPagePosition()
   }
 
   const showFlashcards = () => {
     resetQuiz()
     setCardIndex(0)
     setFlipped(false)
+    resetPagePosition()
   }
 
   const submitQuizAnswer = (answer: string) => {
@@ -1288,112 +1290,97 @@ function StudyApp({
         <span style={{ width: studyWords.length ? `${Math.min(100, ((cardIndex + 1) / studyWords.length) * 100)}%` : quizComplete ? '100%' : '0%' }} />
       </div>
 
-      <div className="study-progress-summary" aria-label={dailyReview ? '今日複習進度' : favoriteReview ? '收藏熟悉度' : '本份背誦進度'}>
-        <span>{dailyReview ? '今日複習' : favoriteReview ? '收藏熟悉度' : '本份進度'}</span>
-        <strong>{dailyReview ? '已複習' : '已背'} {partKnown} · 剩 {partRemaining}</strong>
-      </div>
-
-      <section className="study-toolbar" aria-label="篩選字卡">
-        <div className="practice-tabs" aria-label="學習方式">
-          <button aria-pressed={cardMode === 'flashcard'} className={cardMode === 'flashcard' ? 'is-active' : ''} onClick={showFlashcards} type="button">
-            <RotateCcw size={15} /><span>字卡</span>
-          </button>
-          <button aria-pressed={cardMode === 'quiz' && quizKind === 'meaning'} className={cardMode === 'quiz' && quizKind === 'meaning' ? 'is-active' : ''} onClick={() => startQuiz('meaning')} type="button">
-            <Languages size={15} /><span>意思</span>
-          </button>
-          <button aria-pressed={cardMode === 'quiz' && quizKind === 'root'} className={cardMode === 'quiz' && quizKind === 'root' ? 'is-active' : ''} onClick={() => startQuiz('root')} type="button">
-            <Sprout size={15} /><span>字根</span>
-          </button>
-          <button aria-pressed={cardMode === 'quiz' && quizKind === 'spelling'} className={cardMode === 'quiz' && quizKind === 'spelling' ? 'is-active' : ''} onClick={() => startQuiz('spelling')} type="button">
-            <Keyboard size={15} /><span>拼字</span>
-          </button>
-        </div>
-        <details className="study-options">
-          <summary>篩選與順序</summary>
-          <div className="study-options-content">
-            <div className="study-sequence-tabs" aria-label="單字順序">
-              <button aria-pressed={sequenceMode === 'fixed'} className={sequenceMode === 'fixed' ? 'is-active' : ''} onClick={() => applySequenceMode('fixed')} type="button">
-                固定 · 同字根連續
-              </button>
-              <button aria-pressed={sequenceMode === 'random'} className={sequenceMode === 'random' ? 'is-active' : ''} onClick={() => applySequenceMode('random')} type="button">
-                隨機 · 全部打散
-              </button>
-            </div>
-            <div className="mode-tabs">
-              {([
-                ['all', '全部'],
-                ['review', '待複習'],
-                ['known', '已記住'],
-                ['favorites', '收藏'],
-              ] as const).map(([mode, label]) => (
-                <button className={studyMode === mode ? 'is-active' : ''} key={mode} onClick={() => applyMode(mode)} type="button">
-                  {label}
-                </button>
-              ))}
-            </div>
-            <div className="filter-row">
-              <label className="search-box">
-                <Search size={16} aria-hidden="true" />
-                <input
-                  aria-label="搜尋單字、字根或意思"
-                  onChange={(event) => { setAutoPlay(false); setQuery(event.target.value); setCardIndex(0); setFlipped(false); resetQuiz() }}
-                  placeholder="搜尋單字或意思"
-                  value={query}
-                />
-                {query && (
-                  <button aria-label="清除搜尋" onClick={() => { setAutoPlay(false); setQuery(''); resetQuiz() }} type="button"><X size={15} /></button>
-                )}
-              </label>
-              <select aria-label="選擇字根家族" onChange={(event) => applyRoot(event.target.value)} value={rootFilter}>
-                <option value="all">全部字根</option>
-                {rootsForPart.map((group) => (
-                  <option key={group.rootNo} value={group.rootNo}>#{group.rootNo} · {group.root}</option>
-                ))}
-                <option value="S">S · 無字根（{partWords.filter((word) => word.root === 'S').length}）</option>
-              </select>
-            </div>
-          </div>
-        </details>
+      <section className="study-toolbar" aria-label="播放與字卡設定">
         {cardMode === 'flashcard' && (
-          <div className="pronunciation-mode-panel">
-            <div className="study-sequence-tabs" role="group" aria-label="發音模式">
-              <button type="button" aria-pressed={pronunciationMode === 'general'} className={pronunciationMode === 'general' ? 'is-active' : ''} onClick={() => changePronunciationMode('general')}>一般發音</button>
-              <button type="button" aria-pressed={pronunciationMode === 'detailed'} className={pronunciationMode === 'detailed' ? 'is-active' : ''} onClick={() => changePronunciationMode('detailed')}>詳細發音</button>
-            </div>
-            {pronunciationMode === 'detailed' && <p>單字 → 逐字母拼讀 → 單字 → 翻面念中文<br /><a href="/audio/letters-v2/attribution.json" target="_blank" rel="noreferrer">字母錄音來源與授權</a></p>}
-          </div>
-        )}
-        {cardMode === 'flashcard' && <div className={`autoplay-panel ${autoPlay ? 'is-playing' : ''}`}>
-          <button aria-pressed={autoPlay} className="autoplay-toggle" onClick={toggleAutoPlay} type="button">
-            {autoPlay ? <Pause size={18} /> : <Play size={18} />}
-            <span>
-              <strong>{autoPlay ? '暫停自動連播' : '開始自動連播'}</strong>
-              <small>英文、中文播完後各停 1 秒</small>
-            </span>
-          </button>
-          <label className="duration-control">
-            <Timer size={17} aria-hidden="true" />
-            <span>每字至少</span>
-            <select
-              aria-label="選擇每個單字停留秒數"
-              onChange={(event) => changeCardDuration(Number(event.target.value))}
-              value={cardDuration}
-            >
-              {AUTOPLAY_OPTIONS.map((seconds) => (
-                <option key={seconds} value={seconds}>{seconds} 秒</option>
-              ))}
-            </select>
-          </label>
-        </div>}
-        {cardMode === 'flashcard' && pronunciationMode === 'general' && (
-          <div className={`mandarin-audio-panel ${mandarinAutoplay ? 'is-enabled' : ''}`}>
-            <button aria-pressed={mandarinAutoplay} onClick={toggleMandarinAutoplay} type="button">
-              <Volume2 size={18} aria-hidden="true" />
-              <strong>中文發音</strong>
-              <b>{mandarinAutoplay ? '開' : '關'}</b>
+          <div className="playback-controls" role="group" aria-label="連播與發音模式">
+            <button aria-label={autoPlay ? '暫停自動連播' : '開始自動連播'} aria-pressed={autoPlay} className={`autoplay-toggle ${autoPlay ? 'is-active' : ''}`} onClick={toggleAutoPlay} type="button">
+              {autoPlay ? <Pause size={17} aria-hidden="true" /> : <Play size={17} aria-hidden="true" />}
+              <span>{autoPlay ? '暫停' : '連播'}</span>
             </button>
+            <button type="button" aria-label="一般發音" aria-pressed={pronunciationMode === 'general'} className={pronunciationMode === 'general' ? 'is-active' : ''} onClick={() => changePronunciationMode('general')}>一般</button>
+            <button type="button" aria-label="詳細發音，包含逐字母拼讀" aria-pressed={pronunciationMode === 'detailed'} className={pronunciationMode === 'detailed' ? 'is-active' : ''} onClick={() => changePronunciationMode('detailed')}>詳細</button>
           </div>
         )}
+        <div className={`study-settings ${cardMode === 'quiz' ? 'quiz-settings' : ''}`}>
+          {cardMode === 'flashcard' && (
+            <>
+              <label className="duration-control" title="每字最低停留時間；中英文播完後各停 1 秒">
+                <Timer size={16} aria-hidden="true" />
+                <select
+                  aria-label="選擇每個單字最低停留秒數"
+                  onChange={(event) => changeCardDuration(Number(event.target.value))}
+                  value={cardDuration}
+                >
+                  {AUTOPLAY_OPTIONS.map((seconds) => (
+                    <option key={seconds} value={seconds}>{seconds} 秒</option>
+                  ))}
+                </select>
+              </label>
+              <button
+                aria-label={pronunciationMode === 'detailed' ? '詳細發音固定包含中文發音' : '自動播放中文發音'}
+                aria-pressed={pronunciationMode === 'detailed' || mandarinAutoplay}
+                className={`mandarin-toggle ${pronunciationMode === 'detailed' || mandarinAutoplay ? 'is-active' : ''}`}
+                disabled={pronunciationMode === 'detailed'}
+                onClick={toggleMandarinAutoplay}
+                type="button"
+              >
+                中文 <span>{pronunciationMode === 'detailed' || mandarinAutoplay ? '開' : '關'}</span>
+              </button>
+            </>
+          )}
+          <details className="study-options">
+            <summary aria-label="篩選與順序">篩選</summary>
+            <div className="study-options-content">
+              <div className="study-sequence-tabs" aria-label="單字順序">
+                <button aria-pressed={sequenceMode === 'fixed'} className={sequenceMode === 'fixed' ? 'is-active' : ''} onClick={() => applySequenceMode('fixed')} type="button">
+                  固定 · 同字根連續
+                </button>
+                <button aria-pressed={sequenceMode === 'random'} className={sequenceMode === 'random' ? 'is-active' : ''} onClick={() => applySequenceMode('random')} type="button">
+                  隨機 · 全部打散
+                </button>
+              </div>
+              <div className="mode-tabs">
+                {([
+                  ['all', '全部'],
+                  ['review', '待複習'],
+                  ['known', '已記住'],
+                  ['favorites', '收藏'],
+                ] as const).map(([mode, label]) => (
+                  <button className={studyMode === mode ? 'is-active' : ''} key={mode} onClick={() => applyMode(mode)} type="button">
+                    {label}
+                  </button>
+                ))}
+              </div>
+              <div className="filter-row">
+                <label className="search-box">
+                  <Search size={16} aria-hidden="true" />
+                  <input
+                    aria-label="搜尋單字、字根或意思"
+                    onChange={(event) => { setAutoPlay(false); setQuery(event.target.value); setCardIndex(0); setFlipped(false); resetQuiz() }}
+                    placeholder="搜尋單字或意思"
+                    value={query}
+                  />
+                  {query && (
+                    <button aria-label="清除搜尋" onClick={() => { setAutoPlay(false); setQuery(''); resetQuiz() }} type="button"><X size={15} /></button>
+                  )}
+                </label>
+                <select aria-label="選擇字根家族" onChange={(event) => applyRoot(event.target.value)} value={rootFilter}>
+                  <option value="all">全部字根</option>
+                  {rootsForPart.map((group) => (
+                    <option key={group.rootNo} value={group.rootNo}>#{group.rootNo} · {group.root}</option>
+                  ))}
+                  <option value="S">S · 無字根（{partWords.filter((word) => word.root === 'S').length}）</option>
+                </select>
+              </div>
+              {cardMode === 'flashcard' && (
+                <p className="playback-help">
+                  中英文播完後各停 1 秒，且達到所選秒數才換字。
+                  {pronunciationMode === 'detailed' && <> 詳細發音包含逐字母拼讀及中文。<a href="/audio/letters-v2/attribution.json" target="_blank" rel="noreferrer">字母錄音來源與授權</a></>}
+                </p>
+              )}
+            </div>
+          </details>
+        </div>
         {cardMode === 'flashcard' && autoPlay && activeWord && (
           <div className="autoplay-timeline" aria-label={`這張字卡至少停留 ${cardDuration} 秒`}>
             <span key={`${activeWord.id}-${cardDuration}`} style={{ animationDuration: `${cardDuration}s` }} />
@@ -1622,6 +1609,25 @@ function StudyApp({
           <Button onClick={() => { applyMode('all'); applyRoot('all'); setQuery('') }} variant="outline">顯示全部字卡</Button>
         </section>
       )}
+
+      <nav className="practice-tabs" aria-label="學習方式">
+        <button aria-pressed={cardMode === 'flashcard'} className={cardMode === 'flashcard' ? 'is-active' : ''} onClick={showFlashcards} type="button">
+          <RotateCcw size={15} /><span>字卡</span>
+        </button>
+        <button aria-pressed={cardMode === 'quiz' && quizKind === 'meaning'} className={cardMode === 'quiz' && quizKind === 'meaning' ? 'is-active' : ''} onClick={() => startQuiz('meaning')} type="button">
+          <Languages size={15} /><span>意思</span>
+        </button>
+        <button aria-pressed={cardMode === 'quiz' && quizKind === 'root'} className={cardMode === 'quiz' && quizKind === 'root' ? 'is-active' : ''} onClick={() => startQuiz('root')} type="button">
+          <Sprout size={15} /><span>字根</span>
+        </button>
+        <button aria-pressed={cardMode === 'quiz' && quizKind === 'spelling'} className={cardMode === 'quiz' && quizKind === 'spelling' ? 'is-active' : ''} onClick={() => startQuiz('spelling')} type="button">
+          <Keyboard size={15} /><span>拼字</span>
+        </button>
+      </nav>
+      <div className="study-progress-summary" aria-label={dailyReview ? '今日複習進度' : favoriteReview ? '收藏熟悉度' : '本份背誦進度'}>
+        <span>{dailyReview ? '今日複習' : favoriteReview ? '收藏熟悉度' : '本份進度'}</span>
+        <strong>{dailyReview ? '已複習' : '已背'} {partKnown} · 剩 {partRemaining}</strong>
+      </div>
     </main>
   )
 }

@@ -194,6 +194,36 @@ assert.equal(appSource.includes('recordListeningCompletion(current, wordId'), tr
 assert.equal(appSource.includes('className="listening-progress-details"'), true)
 assert.equal(appSource.includes('className="listening-complete-summary"'), true)
 
+const practiceTabsPosition = appSource.indexOf('className="practice-tabs"')
+assert.equal(appSource.match(/className="practice-tabs"/g)?.length, 1, 'Learning modes must have a single navigation row')
+assert.ok(practiceTabsPosition > appSource.indexOf('className="recall-actions"'), 'Learning modes must follow familiarity buttons')
+assert.ok(practiceTabsPosition > appSource.indexOf('className="card-nav"'), 'Learning modes must follow card navigation')
+assert.ok(appSource.indexOf('className="study-progress-summary"') > practiceTabsPosition, 'Secondary progress must remain below the card')
+const playbackRow = appSource.slice(appSource.indexOf('className="playback-controls"')).split('</div>')[0]
+assert.equal(playbackRow.match(/<button\b/g)?.length, 3, 'Playback and both pronunciation modes must share one row')
+for (const action of ['toggleAutoPlay', "changePronunciationMode('general')", "changePronunciationMode('detailed')"]) {
+  assert.ok(playbackRow.includes(action), `${action} must remain in the playback row`)
+}
+const settingsRow = appSource.slice(appSource.indexOf('className={`study-settings')).split('</section>')[0]
+for (const action of ['changeCardDuration', 'toggleMandarinAutoplay', 'className="study-options"']) {
+  assert.ok(settingsRow.includes(action), `${action} must remain in the shared settings row`)
+}
+assert.ok(settingsRow.includes("disabled={pronunciationMode === 'detailed'}"), 'Detailed playback must keep its required Mandarin audio')
+for (const handler of ['startQuiz', 'showFlashcards']) {
+  const handlerBody = appSource.slice(appSource.indexOf(`const ${handler} =`)).split('\n  }')[0]
+  assert.ok(handlerBody.includes('resetPagePosition()'), `${handler} must bring the new activity back into view`)
+}
+const appCss = readFileSync(new URL('../src/App.css', import.meta.url), 'utf8')
+const cardActionsCss = appCss.match(/\.card-nav, \.recall-actions\s*\{([^}]+)\}/)?.[1] ?? ''
+assert.match(cardActionsCss, /position:\s*sticky/, 'Card actions must remain reachable in short viewports')
+assert.match(cardActionsCss, /bottom:\s*0/, 'Card actions must stay within the viewport bottom')
+assert.match(cardActionsCss, /safe-area-inset-bottom/, 'Card actions must clear the mobile safe area')
+assert.match(cardActionsCss, /background:\s*var\(--paper\)/, 'Sticky actions need an opaque reading surface')
+for (const className of ['playback-controls', 'study-settings']) {
+  const rowCss = appCss.match(new RegExp(`\\.${className}\\s*\\{([^}]+)\\}`))?.[1] ?? ''
+  assert.match(rowCss, /grid-template-columns:\s*repeat\(3, minmax\(0, 1fr\)\)/, `${className} must keep three controls in one row`)
+}
+
 console.log(JSON.stringify({
   valid: true,
   spacedReview: true,
@@ -214,4 +244,9 @@ console.log(JSON.stringify({
   listeningSyncMerge: true,
   listeningUiStaysCollapsed: true,
   filteredReviewDoesNotSkip: true,
+  learningModesBelowCardActions: true,
+  learningModeChangesResetScroll: true,
+  cardActionsStayReachable: true,
+  compactPlaybackAndSettingsRows: true,
+  secondaryProgressBelowCard: true,
 }, null, 2))
