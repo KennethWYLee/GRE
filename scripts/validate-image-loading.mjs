@@ -104,12 +104,19 @@ try {
   // Walk all available cards, then return: old image objects must not remain retained.
   preloadWordIllustrations([])
   const beforeWalk = requested.length
+  let previousSources = new Set()
+  let expectedRequests = 0
   for (let offset = 0; offset < ids.length; offset += 11) {
-    preloadWordIllustrations(ids.slice(offset, offset + 11))
-    runNextTimer()
+    const windowIds = ids.slice(offset, offset + 11)
+    const windowSources = new Set(windowIds.map((id) => WORD_ILLUSTRATIONS[id].src))
+    const newSources = [...windowSources].filter((src) => !previousSources.has(src))
+    expectedRequests += newSources.length
+    preloadWordIllustrations(windowIds)
+    if (newSources.length) runNextTimer()
     finishWindow()
+    previousSources = windowSources
   }
-  assert.equal(requested.length - beforeWalk, ids.length)
+  assert.equal(requested.length - beforeWalk, expectedRequests, 'Shared images must be downloaded only once in a retained window')
   if (ids.length > 11) {
     const beforeReturn = requested.length
     preloadWordIllustrations(ids.slice(0, 1))

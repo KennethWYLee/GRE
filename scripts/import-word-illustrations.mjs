@@ -4,11 +4,21 @@ import { constants } from 'node:fs'
 import { createHash } from 'node:crypto'
 
 const root = new URL('../', import.meta.url)
-const recordUrl = new URL('docs/word-illustrations-parts4-5.json', root)
+const args = process.argv.slice(2)
+const completingBook = args[0] === '--parts1-3'
+if (completingBook) args.shift()
+const suffix = completingBook ? 'parts1-3' : 'parts4-5'
+const exportName = completingBook ? 'PARTS_1_2_3_ILLUSTRATIONS' : 'PARTS_4_5_ILLUSTRATIONS'
+const recordUrl = new URL(`docs/word-illustrations-${suffix}.json`, root)
 const words = JSON.parse(await readFile(new URL('data/vocabulary-1000.json', root))).words
-const expected = words.filter((word) => [4, 5].includes(word.part)).sort((a, b) => a.part - b.part || a.deckPosition - b.deckPosition)
+const existing = completingBook
+  ? (await Promise.all(['first10', 'parts4-5'].map(async (name) => JSON.parse(await readFile(new URL(`docs/word-illustrations-${name}.json`, root))).assets))).flat()
+  : []
+const existingIds = new Set(existing.map((asset) => asset.wordId))
+const expected = words.filter((word) => completingBook ? word.part <= 3 && !existingIds.has(word.id) : [4, 5].includes(word.part))
+  .sort((a, b) => a.part - b.part || a.deckPosition - b.deckPosition)
 const checksum = (buffer) => createHash('sha256').update(buffer).digest('hex')
-const [preparedPath, decisionsPath] = process.argv.slice(2)
+const [preparedPath, decisionsPath] = args
 let record
 
 if (preparedPath) {
@@ -17,6 +27,10 @@ if (preparedPath) {
   const decisions = JSON.parse(await readFile(decisionsPath))
   const byId = new Map(prepared.map((asset) => [asset.wordId, asset]))
   assert.equal(byId.size, prepared.length, 'Duplicate prepared word ID')
+  for (const asset of existing) {
+    assert.ok(!byId.has(asset.wordId), `Do not replace an existing card: ${asset.wordId}`)
+    byId.set(asset.wordId, { ...asset, preparedPath: new URL(`public${asset.output}`, root) })
+  }
   const reuse = new Map(decisions.reuse.map((asset) => [asset.wordId, asset]))
   const assets = []
   const copies = new Map()
@@ -31,7 +45,7 @@ if (preparedPath) {
       assert.equal(asset.part, word.part)
       assert.equal(asset.deckPosition, word.deckPosition)
     }
-    assert.match(asset.output, /^\/images\/words\/[a-z-]+-word1000-\d+-v1\.webp$/)
+    assert.match(asset.output, /^\/images\/words\/[a-z-]+(?:-word1000-\d+)?-v1\.webp$/)
     const buffer = await readFile(asset.preparedPath)
     assert.equal(checksum(buffer), asset.sha256, `Changed prepared asset: ${word.id}`)
     assert.equal(buffer.length, asset.bytes)
@@ -57,7 +71,7 @@ if (preparedPath) {
       } : {}),
     })
   }
-  assert.equal(expected.length, 434)
+  assert.equal(expected.length, completingBook ? 641 : 434)
   // Validate every destination before copying; existing assets are never overwritten.
   for (const [output, asset] of copies) {
     const destination = new URL(`public${output}`, root)
@@ -75,7 +89,9 @@ if (preparedPath) {
   record = {
     version: 1,
     createdAt: '2026-09-09',
-    scope: '1000 字 Part 4 與 Part 5，每份 217 張字卡；保留 Part 1 前 10 字原圖，不改動其他單字。',
+    scope: completingBook
+      ? '補齊 1000 字 Part 1、Part 2、Part 3 共 641 張字卡；保留 Part 1 前 10 字及 Part 4、Part 5 的全部原圖，不改動 2000 字書。'
+      : '1000 字 Part 4 與 Part 5，每份 217 張字卡；保留 Part 1 前 10 字原圖，不改動其他單字。',
     generation: {
       tool: 'built-in image_gen',
       mode: 'generate',
@@ -84,7 +100,7 @@ if (preparedPath) {
     },
     preparation: { format: 'WebP', width: 480, height: 480, quality: 78, effort: 6, alterations: '僅縮小與壓縮，未裁切或改動畫面內容。' },
     verification: {
-      coverage: '依 word ID 及固定 deckPosition 核對兩份全部單字。',
+      coverage: completingBook ? '依 word ID 及固定 deckPosition 核對全部 1085 張字卡，每份 217 張。' : '依 word ID 及固定 deckPosition 核對兩份全部單字。',
       assets: '生成代理檢視原圖；主代理另檢視選用圖片與縮圖，排除明顯人物瑕疵。',
       performance: '以模擬下載卡住、失敗、切換與逾時驗證連播獨立性，未執行 Android Firefox 實機效能量測。',
     },
@@ -97,5 +113,5 @@ if (preparedPath) {
 
 assert.deepEqual(record.assets.map((asset) => asset.wordId), expected.map((word) => word.id))
 const mapping = Object.fromEntries(record.assets.map((asset) => [asset.wordId, { word: asset.word, src: asset.output, alt: asset.alt }]))
-await writeFile(new URL('src/word-illustrations-parts4-5.ts', root), `// Generated from docs/word-illustrations-parts4-5.json by scripts/import-word-illustrations.mjs.\nexport const PARTS_4_5_ILLUSTRATIONS = ${JSON.stringify(mapping, null, 2)} as const\n`)
+await writeFile(new URL(`src/word-illustrations-${suffix}.ts`, root), `// Generated from docs/word-illustrations-${suffix}.json by scripts/import-word-illustrations.mjs.\nexport const ${exportName} = ${JSON.stringify(mapping, null, 2)} as const\n`)
 console.log(JSON.stringify({ cards: record.assets.length, uniqueImages: new Set(record.assets.map((asset) => asset.output)).size }))

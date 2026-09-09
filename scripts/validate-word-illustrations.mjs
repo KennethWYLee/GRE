@@ -5,13 +5,11 @@ import { WORD_ILLUSTRATIONS, getWordIllustration } from '../src/word-illustratio
 import './validate-image-loading.mjs'
 
 const deck = JSON.parse(readFileSync(new URL('../data/vocabulary-1000.json', import.meta.url)))
-const firstTen = deck.words.filter((word) => word.part === 1).sort((a, b) => a.deckPosition - b.deckPosition).slice(0, 10)
-const partsFourAndFive = deck.words.filter((word) => [4, 5].includes(word.part)).sort((a, b) => a.part - b.part || a.deckPosition - b.deckPosition)
-const expected = [...firstTen, ...partsFourAndFive]
-assert.equal(partsFourAndFive.filter((word) => word.part === 4).length, 217)
-assert.equal(partsFourAndFive.filter((word) => word.part === 5).length, 217)
+const expected = [...deck.words].sort((a, b) => a.part - b.part || a.deckPosition - b.deckPosition)
+assert.equal(expected.length, 1085)
+for (const part of [1, 2, 3, 4, 5]) assert.equal(expected.filter((word) => word.part === part).length, 217)
 assert.deepEqual(Object.keys(WORD_ILLUSTRATIONS).sort(), expected.map((word) => word.id).sort())
-const records = ['first10', 'parts4-5'].flatMap((name) => JSON.parse(readFileSync(new URL(`../docs/word-illustrations-${name}.json`, import.meta.url))).assets)
+const records = ['first10', 'parts4-5', 'parts1-3'].flatMap((name) => JSON.parse(readFileSync(new URL(`../docs/word-illustrations-${name}.json`, import.meta.url))).assets)
 assert.equal(records.length, expected.length)
 const byId = new Map(records.map((asset) => [asset.wordId, asset]))
 assert.equal(byId.size, expected.length)
@@ -34,7 +32,7 @@ for (const word of expected) {
   assert.equal(image.length, record.bytes)
   assert.equal(createHash('sha256').update(image).digest('hex'), record.sha256)
   assert.ok(record.prompt && record.inspection)
-  if (word.part !== 1) {
+  if (!(word.part === 1 && word.deckPosition <= 10)) {
     assert.equal(illustration.alt, record.alt)
     assert.equal(record.part, word.part)
     assert.equal(record.deckPosition, word.deckPosition)
@@ -48,9 +46,8 @@ for (const word of expected) {
   if (!uniqueImages.has(illustration.src)) totalBytes += image.length
   uniqueImages.set(illustration.src, image.length)
 }
-const expectedIds = new Set(expected.map((word) => word.id))
-for (const word of deck.words) if (!expectedIds.has(word.id)) assert.equal(getWordIllustration(word.id), null)
-assert.equal(getWordIllustration('word-124'), null, 'The 2000-word book remains outside the illustration scope')
+const otherDeck = JSON.parse(readFileSync(new URL('../data/vocabulary.json', import.meta.url)))
+for (const word of otherDeck.words) assert.equal(getWordIllustration(word.id), null, 'The 2000-word book remains outside the illustration scope')
 assert.equal(getWordIllustration('unknown-word'), null)
 
-console.log(JSON.stringify({ valid: true, illustratedCards: expected.length, part4: 217, part5: 217, uniqueImages: uniqueImages.size, totalBytes, maxImageBytes: Math.max(...uniqueImages.values()) }, null, 2))
+console.log(JSON.stringify({ valid: true, illustratedCards: expected.length, cardsPerPart: [217, 217, 217, 217, 217], uniqueImages: uniqueImages.size, totalBytes, maxImageBytes: Math.max(...uniqueImages.values()) }, null, 2))

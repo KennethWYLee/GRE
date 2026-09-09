@@ -1,3 +1,4 @@
+import { PARTS_1_2_3_ILLUSTRATIONS } from './word-illustrations-parts1-3.ts'
 import { PARTS_4_5_ILLUSTRATIONS } from './word-illustrations-parts4-5.ts'
 
 type WordIllustration = {
@@ -17,6 +18,7 @@ export const WORD_ILLUSTRATIONS: Readonly<Record<string, WordIllustration>> = {
   'word1000-224': { word: 'apt', src: '/images/words/apt-v1.webp', alt: '適合：選對尺寸的扳手，恰好扣住螺栓' },
   'word1000-393': { word: 'adaptive', src: '/images/words/adaptive-v1.webp', alt: '適應：登山者遇到天氣轉雨，換上雨衣並撐傘繼續前進' },
   'word1000-520': { word: 'adept', src: '/images/words/adept-v1.webp', alt: '熟練：專業廚師穩定完成一排精緻而整齊的料理' },
+  ...PARTS_1_2_3_ILLUSTRATIONS,
   ...PARTS_4_5_ILLUSTRATIONS,
 }
 
